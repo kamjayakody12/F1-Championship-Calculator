@@ -1,0 +1,28 @@
+// lib/tracks.ts
+export const TRACKS = [
+    "Bahrain",
+    "Jeddah",
+    "Melbourne",
+    "Imola",
+    "Miami",
+    "Barcelona",
+    "Monza",
+    "Singapore",
+    "Suzuka",
+    "Austin",
+    "Mexico City",
+    "Monaco",
+    "Baku",
+    "Spa",
+    "Zandvoort",
+    "Interlagos",
+    "Las Vegas",
+    "Sochi",
+    "Istanbul",
+    "Abu Dhabi",
+    "Stuttgart",
+    "Kyalami",
+    "Portimão",
+    "Hockenheim",
+  ];
+  
