@@ -20,14 +20,23 @@ export async function POST(request: Request) {
   return NextResponse.json(driver);
 }
 
+// Updated PUT method to allow updating points and/or team
 export async function PUT(request: Request) {
   await connectToDatabase();
-  const { driverId, points } = await request.json();
-  const updatedDriver = await Driver.findByIdAndUpdate(
-    driverId,
-    { points },
-    { new: true }
-  );
+  const { driverId, points, teamId } = await request.json();
+  
+  // Build the update object conditionally
+  const update: { points?: number; team?: string | null } = {};
+  if (points !== undefined) {
+    update.points = points;
+  }
+  if (teamId !== undefined) {
+    update.team = teamId || null;
+  }
+
+  const updatedDriver = await Driver.findByIdAndUpdate(driverId, update, {
+    new: true,
+  });
   return NextResponse.json(updatedDriver);
 }
 
