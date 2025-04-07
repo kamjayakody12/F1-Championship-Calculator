@@ -6,11 +6,24 @@ import Driver from "@/models/Driver";
 // Define the points mapping for positions 1 to 10
 const positionPointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const track = searchParams.get("track");
+
+  if (!track) {
+    return NextResponse.json({ error: "No track specified" }, { status: 400 });
+  }
+
+  await connectToDatabase();
+  const results = await Result.find({ track }).lean();
+  return NextResponse.json(results);
+}
+
 export async function POST(request: Request) {
   await connectToDatabase();
   const { track, results } = await request.json();
 
-  // Optionally, you could clear existing results for the track
+  // Optionally, you could clear existing results for the track:
   // await Result.deleteMany({ track });
 
   // Process each result row
@@ -27,7 +40,7 @@ export async function POST(request: Request) {
 
     const totalPoints = basePoints + bonusPoints;
 
-    // Save the race result (you can expand this as needed)
+    // Save the race result (expand as needed)
     await Result.create({
       track,
       position: row.position,

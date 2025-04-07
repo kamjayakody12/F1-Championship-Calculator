@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TRACKS } from "@/lib/tracks";
 
-// Interface for each row in the results table
+// Define an interface for each row in the results table
 interface ResultRow {
   position: number;
   driverId: string;
@@ -18,39 +18,75 @@ interface ResultRow {
 const positionPointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
 export default function AdminDashboard() {
-  // Navigation section (for managing drivers and teams)
+  // Navigation section: drivers and teams management links
   const [drivers, setDrivers] = useState<any[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<string>("");
 
-  // Results state will be reinitialized based on the number of drivers
+  // Results state, which will be reinitialized based on the number of drivers
   const [results, setResults] = useState<ResultRow[]>([]);
 
-  // Fetch drivers for the dropdown
+  // Fetch drivers for the Race Results dropdown
   async function fetchDrivers() {
     const res = await fetch("/api/drivers", { method: "GET" });
     const data = await res.json();
     setDrivers(data);
   }
 
+  // Fetch existing race results for a selected track
+  async function fetchResultsForTrack(track: string) {
+    const res = await fetch(`/api/results?track=${encodeURIComponent(track)}`, { method: "GET" });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.length > 0) {
+        // Map fetched results to our ResultRow interface
+        setResults(
+          data.map((result: any) => ({
+            position: result.position,
+            driverId: result.driver,
+            pole: result.pole,
+            fastestLap: result.fastestLap,
+          }))
+        );
+      } else {
+        // No existing results: initialize empty rows based on the number of drivers
+        setResults(
+          Array.from({ length: drivers.length }, (_, i) => ({
+            position: i + 1,
+            driverId: "",
+            pole: false,
+            fastestLap: false,
+          }))
+        );
+      }
+    }
+  }
+
+  // Initial fetch of drivers
   useEffect(() => {
     fetchDrivers();
   }, []);
 
-  // When drivers update, set the results table rows equal to the number of drivers.
+  // When drivers update and no track is selected, reinitialize the results table with empty rows.
   useEffect(() => {
-    setResults(
-      Array.from({ length: drivers.length }, (_, i) => ({
-        position: i + 1,
-        driverId: "",
-        pole: false,
-        fastestLap: false,
-      }))
-    );
-  }, [drivers]);
+    if (!selectedTrack) {
+      setResults(
+        Array.from({ length: drivers.length }, (_, i) => ({
+          position: i + 1,
+          driverId: "",
+          pole: false,
+          fastestLap: false,
+        }))
+      );
+    }
+  }, [drivers, selectedTrack]);
 
-  // Handle track selection
+  // Handle track selection change
   function handleTrackChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    setSelectedTrack(e.target.value);
+    const selected = e.target.value;
+    setSelectedTrack(selected);
+    if (selected) {
+      fetchResultsForTrack(selected);
+    }
   }
 
   // Update a result row when a driver is selected
@@ -73,27 +109,23 @@ export default function AdminDashboard() {
   function toggleFastestLap(position: number) {
     setResults((prev) =>
       prev.map((row) =>
-        row.position === position
-          ? { ...row, fastestLap: !row.fastestLap }
-          : row
+        row.position === position ? { ...row, fastestLap: !row.fastestLap } : row
       )
     );
   }
 
-  // Submit results to the API
+  // Submit the race results to the API
   async function submitResults() {
     if (!selectedTrack) {
       alert("Please select a track");
       return;
     }
-
-    // Ensure every row has a selected driver
+    // Validate that every row has a selected driver
     const incompleteRows = results.filter((row) => !row.driverId);
     if (incompleteRows.length > 0) {
       alert("Please select a driver for every position.");
       return;
     }
-
     const res = await fetch("/api/results", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -104,6 +136,8 @@ export default function AdminDashboard() {
     });
     if (res.ok) {
       alert("Results saved!");
+      // Optionally, refresh the results table
+      fetchResultsForTrack(selectedTrack);
     }
   }
 
@@ -139,7 +173,6 @@ export default function AdminDashboard() {
             ))}
           </select>
         </div>
-
         {selectedTrack && results.length > 0 && (
           <>
             <table className="border-collapse w-full mt-6">
@@ -159,11 +192,10 @@ export default function AdminDashboard() {
                     row.position <= 10
                       ? positionPointsMapping[row.position - 1]
                       : 0;
-                  // Add bonus for pole and fastest lap
+                  // Calculate bonus points for pole and fastest lap
                   const bonusPoints =
                     (row.pole ? 1 : 0) + (row.fastestLap ? 1 : 0);
                   const totalPoints = basePoints + bonusPoints;
-
                   return (
                     <tr key={row.position} className="border-b">
                       <td className="p-2">{row.position}</td>
