@@ -3,6 +3,7 @@ import Link from "next/link";
 import { connectToDatabase } from "@/lib/db";
 import Driver from "@/models/Driver";
 import Team from "@/models/Team";
+import { Button } from "@/components/ui/button";
 
 export default async function HomePage() {
   // Connect to DB
@@ -29,10 +30,8 @@ export default async function HomePage() {
       <header className="flex items-center justify-between mb-6">
         <h1 className="text-4xl font-bold">F1 Championship Standings</h1>
         <Link
-          href="/admin/login"
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-500"
-        >
-          Admin Login
+          href="/admin/login">
+          <Button variant ="outline">Admin Login</Button>
         </Link>
       </header>
 
