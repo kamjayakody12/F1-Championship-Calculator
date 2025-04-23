@@ -125,6 +125,9 @@ export default function AdminDashboard() {
         <Link href="/admin/teams">
           <Button>Manage Teams</Button>
         </Link>
+        <Link href="/admin/tracks">
+          <Button>Manage Tracks</Button>
+        </Link>
       </div>
       {/* Race Results Section */}
       <div className="mt-10">
@@ -147,7 +150,7 @@ export default function AdminDashboard() {
         {selectedTrack && results.length > 0 && (
           <>
             <DataTable
-              data={results}
+              data={results} 
               drivers={drivers}
               updateDriver={updateDriver}
               togglePole={togglePole}
