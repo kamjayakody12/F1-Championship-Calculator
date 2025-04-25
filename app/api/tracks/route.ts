@@ -1,36 +1,27 @@
+// app/api/tracks/route.ts
 import { NextResponse } from "next/server";
-import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
 import Track from "@/models/Track";
 
-export async function GET(request: Request) {
-  await connectToDatabase();
-  const tracks = await Track.find({}).lean();
-  return NextResponse.json(tracks);
-}
+// Full F1 calendar
+const ROUND_NAMES = [
+  "Australia", "China", "Japan", "Bahrain", "Saudi Arabia",
+  "USA", "Italy", "Monaco", "Spain", "Canada", "Austria",
+  "United Kingdom", "Belgium", "Hungary", "Netherlands",
+  "Azerbaijan", "Singapore", "Mexico", "Brazil", "Qatar",
+  "Abu Dhabi"
+];
 
-// Handles both create (when no id) and update (when id provided)
-export async function POST(request: Request) {
+export async function GET() {
   await connectToDatabase();
-  const { id, name, date } = await request.json();
 
-  // If an id is provided, we treat this as an update
-  if (id) {
-    let updated;
-    if (mongoose.isValidObjectId(id)) {
-      // update by real ObjectId
-      updated = await Track.findByIdAndUpdate(id, { date }, { new: true });
-    } else {
-      // update by track name (temporary id)
-      updated = await Track.findOneAndUpdate({ name: id }, { date }, { new: true });
-    }
-    if (!updated) {
-      return NextResponse.json({ error: "Track not found" }, { status: 404 });
-    }
-    return NextResponse.json(updated);
+  // If no tracks exist yet, seed all 24
+  const count = await Track.countDocuments();
+  if (count === 0) {
+    await Track.insertMany(ROUND_NAMES.map((name) => ({ name })));
   }
 
-  // Otherwise, create a new track
-  const track = await Track.create({ name, date });
-  return NextResponse.json(track);
+  // Return all tracks
+  const all = await Track.find({}).lean();
+  return NextResponse.json(all);
 }

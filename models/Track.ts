@@ -1,16 +1,9 @@
-import mongoose, { Schema, model, models } from "mongoose";
+// models/Track.ts
+import mongoose from "mongoose";
 
-interface TrackDoc {
-  name: string;
-  date: Date;
-}
+const TrackSchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+});
 
-const TrackSchema = new Schema<TrackDoc>(
-  {
-    name: { type: String, required: true, unique: true },
-    date: { type: Date, required: true },
-  },
-  { timestamps: true }
-);
-
-export default models.Track || model<TrackDoc>("Track", TrackSchema);
+export default mongoose.models.Track ||
+  mongoose.model("Track", TrackSchema);
