@@ -14,62 +14,69 @@ interface TrackRow {
   date: string; // "YYYY-MM-DD"
 }
 
+function parseLocalDate(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
 export default function ManageTracksPage() {
   const [tracks, setTracks] = useState<TrackRow[]>([]);
 
   useEffect(() => {
     fetch("/api/tracks")
       .then((r) => r.json())
-      .then((data) => {
+      .then((data: any[]) => {
         if (data.length) {
-          // existing saved tracks—use their real _id
           setTracks(
-            data.map((t: any) => ({
+            data.map((t) => ({
               _id: t._id,
               name: t.name,
               date: t.date.slice(0, 10),
             }))
           );
         } else {
-          // no saved tracks yet—seed with track names as temporary IDs
           setTracks(
             TRACKS.map((name) => ({
-              _id: name,          // unique temp ID
+              _id: name,
               name,
               date: new Date().toISOString().slice(0, 10),
             }))
           );
         }
+      })
+      .catch(() => {
+        setTracks(
+          TRACKS.map((name) => ({
+            _id: name,
+            name,
+            date: new Date().toISOString().slice(0, 10),
+          }))
+        );
       });
   }, []);
-  
 
   function handleDateChange(id: string, newIsoDate: string) {
-    setTracks(prev =>
-        prev.map(t => t._id === id ? { ...t, date: newIsoDate } : t)
-      );      
+    setTracks((prev) =>
+      prev.map((t) => (t._id === id ? { ...t, date: newIsoDate } : t))
+    );
   }
 
   async function saveAll() {
+    // Loop through each track row
     for (const t of tracks) {
-      if (t._id) {
-        await fetch("/api/tracks", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: t._id, date: t.date }),
-        });
-      } else {
-        const res = await fetch("/api/tracks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: t.name, date: t.date }),
-        });
-        const created = await res.json();
-        t._id = created._id;
-      }
+      await fetch("/api/tracks", {
+        method: "POST",                // ← POST, not PUT
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: t._id,                   // existing _id or temp name
+          name: t.name,                // only used if creating
+          date: t.date,                
+        }),
+      });
     }
     alert("Schedule saved!");
   }
+  
 
   return (
     <div className="p-6">
@@ -83,7 +90,7 @@ export default function ManageTracksPage() {
         </thead>
         <tbody>
           {tracks.map((t) => (
-            <tr key={t.name}>
+            <tr key={t._id}>
               <td className="border p-2">{t.name}</td>
               <td className="border p-2">
                 <Popover>
@@ -91,17 +98,17 @@ export default function ManageTracksPage() {
                     <Button variant="outline" className="w-[180px] justify-start text-left">
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {t.date
-                        ? format(new Date(t.date), "PPP")
+                        ? format(parseLocalDate(t.date), "PPP")
                         : <span className="text-muted-foreground">Select date</span>}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
                       mode="single"
-                      selected={t.date ? new Date(t.date) : undefined}
+                      selected={t.date ? parseLocalDate(t.date) : undefined}
                       onSelect={(date) => {
                         if (date) {
-                          const iso = date.toISOString().slice(0, 10);
+                          const iso = format(date, "yyyy-MM-dd");
                           handleDateChange(t._id, iso);
                         }
                       }}
