@@ -139,6 +139,9 @@ export default function AdminDashboard() {
         <Link href="/admin/teams">
           <Button>Manage Teams</Button>
         </Link>
+        <Link href="/admin/tracks">
+          <Button>Manage Schedules</Button>
+        </Link>
       </div>
 
       {/* Race Results */}
