@@ -139,7 +139,7 @@ export default function AdminDashboard() {
         <Link href="/admin/teams">
           <Button>Manage Teams</Button>
         </Link>
-        <Link href="/admin/tracks">
+        <Link href="/admin/schedule">
           <Button>Manage Schedules</Button>
         </Link>
       </div>

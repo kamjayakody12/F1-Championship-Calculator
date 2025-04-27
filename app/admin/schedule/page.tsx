@@ -22,7 +22,7 @@ interface TrackRow {
   date: string;
 }
 
-export default function ManageTracksPage() {
+export default function ManageSchedulesPage() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [rows, setRows] = useState<TrackRow[]>([]);
