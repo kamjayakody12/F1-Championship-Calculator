@@ -1,40 +1,33 @@
+// app/admin/dashboard/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
+import DataTable, { ResultRow } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
-import DataTable, { ResultRow } from "@/components/ui/data-table"; 
-// We no longer import TRACKS here; we’ll fetch them from /api/tracks
 
-export default function AdminDashboard() {
-  // === State ===
+export default function AdminDashboardPage() {
   const [drivers, setDrivers] = useState<any[]>([]);
-  const [tracks, setTracks] = useState<string[]>([]);    // list of track **names** from DB
+  const [tracks, setTracks] = useState<string[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<string>("");
   const [results, setResults] = useState<ResultRow[]>([]);
 
-  // === 1) Load drivers for your Results dropdowns ===
-  async function fetchDrivers() {
-    const res = await fetch("/api/drivers");
-    const data = await res.json();
-    setDrivers(data);
-  }
+  // 1️⃣ Load drivers
   useEffect(() => {
-    fetchDrivers();
+    fetch("/api/drivers")
+      .then((r) => r.json())
+      .then(setDrivers);
   }, []);
 
-  // === 2) Load tracks (round names) from MongoDB via /api/tracks ===
-  async function fetchTracks() {
-    const res = await fetch("/api/tracks");
-    const data: { _id: string; name: string }[] = await res.json();
-    // We only need the `name` field for your dropdown value
-    setTracks(data.map((t) => t.name));
-  }
+  // 2️⃣ Load track names
   useEffect(() => {
-    fetchTracks();
+    fetch("/api/tracks")
+      .then((r) => r.json())
+      .then((arr: { name: string }[]) =>
+        setTracks(arr.map((t) => t.name))
+      );
   }, []);
 
-  // === 3) When drivers change (or on first load), seed results rows ===
+  // 3️⃣ Seed empty results whenever driver list changes
   useEffect(() => {
     setResults(
       Array.from({ length: drivers.length }, (_, i) => ({
@@ -46,18 +39,16 @@ export default function AdminDashboard() {
     );
   }, [drivers]);
 
-  // === 4) Handle track selection ===
+  // 4️⃣ When the user picks a round, fetch saved results (or reset)
   function handleTrackChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const track = e.target.value;
     setSelectedTrack(track);
     if (!track) return;
 
-    // Fetch existing results for that round
     fetch(`/api/results?track=${encodeURIComponent(track)}`)
       .then((r) => r.json())
       .then((data: any[]) => {
         if (data.length) {
-          // Map back into our ResultRow shape
           setResults(
             data.map((row) => ({
               position: row.position,
@@ -67,7 +58,6 @@ export default function AdminDashboard() {
             }))
           );
         } else {
-          // No saved results → re-seed empty rows
           setResults(
             Array.from({ length: drivers.length }, (_, i) => ({
               position: i + 1,
@@ -80,38 +70,37 @@ export default function AdminDashboard() {
       });
   }
 
-  // === 5) Callbacks for DataTable meta props ===
-  function updateDriver(position: number, newDriverId: string) {
+  // 5️⃣ Table callbacks
+  function updateDriver(pos: number, id: string) {
     setResults((prev) =>
       prev.map((r) =>
-        r.position === position ? { ...r, driverId: newDriverId } : r
+        r.position === pos ? { ...r, driverId: id } : r
       )
     );
   }
-  function togglePole(position: number) {
+  function togglePole(pos: number) {
     setResults((prev) =>
       prev.map((r) =>
-        r.position === position ? { ...r, pole: !r.pole } : r
+        r.position === pos ? { ...r, pole: !r.pole } : r
       )
     );
   }
-  function toggleFastestLap(position: number) {
+  function toggleFastestLap(pos: number) {
     setResults((prev) =>
       prev.map((r) =>
-        r.position === position
+        r.position === pos
           ? { ...r, fastestLap: !r.fastestLap }
           : r
       )
     );
   }
 
-  // === 6) Submit results back to /api/results ===
+  // 6️⃣ Submit back to your API
   async function submitResults() {
     if (!selectedTrack) {
       alert("Please select a track");
       return;
     }
-    // Ensure every row has a driver
     if (results.some((r) => !r.driverId)) {
       alert("Select a driver for every position");
       return;
@@ -119,68 +108,50 @@ export default function AdminDashboard() {
     await fetch("/api/results", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        track: selectedTrack,
-        results,
-      }),
+      body: JSON.stringify({ track: selectedTrack, results }),
     });
     alert("Results saved!");
   }
 
   return (
-    <div className="p-6 space-y-10">
-      <h1 className="text-4xl font-bold mb-4">Admin Dashboard</h1>
+    <div>
+      <h1 className="text-4xl font-bold mb-6">Race Results</h1>
 
-      {/* Navigation */}
-      <div className="flex gap-4">
-        <Link href="/admin/drivers">
-          <Button>Manage Drivers</Button>
-        </Link>
-        <Link href="/admin/teams">
-          <Button>Manage Teams</Button>
-        </Link>
-        <Link href="/admin/schedule">
-          <Button>Manage Schedules</Button>
-        </Link>
+      {/* —───────── Track selector */}
+      <div className="mb-4 max-w-sm">
+        <label className="block mb-1 font-medium">Select Track</label>
+        <select
+          className="w-full border rounded px-3 py-2"
+          value={selectedTrack}
+          onChange={handleTrackChange}
+        >
+          <option value="">-- Select a Track --</option>
+          {tracks.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* Race Results */}
-      <div className="mt-10">
-        <h2 className="text-3xl font-bold mb-4">Race Results</h2>
-
-        {/* 4) Dropdown now driven by DB-loaded `tracks` array */}
-        <div className="mb-4">
-          <label className="block mb-1 font-medium">Select Track</label>
-          <select
-            className="border rounded px-3 py-2 focus:outline-none"
-            value={selectedTrack}
-            onChange={handleTrackChange}
+      {/* —───────── Results table + Save */}
+      {selectedTrack && results.length > 0 && (
+        <>
+          <DataTable
+            data={results}
+            drivers={drivers}
+            updateDriver={updateDriver}
+            togglePole={togglePole}
+            toggleFastestLap={toggleFastestLap}
+          />
+          <Button
+            onClick={submitResults}
+            className="mt-4 bg-blue-600 text-white"
           >
-            <option value="">-- Select a Track --</option>
-            {tracks.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* 5+6) Results table + Save button */}
-        {selectedTrack && results.length > 0 && (
-          <>
-            <DataTable
-              data={results}
-              drivers={drivers}
-              updateDriver={updateDriver}
-              togglePole={togglePole}
-              toggleFastestLap={toggleFastestLap}
-            />
-            <Button className="mt-4" onClick={submitResults}>
-              Save Results
-            </Button>
-          </>
-        )}
-      </div>
+            Save Results
+          </Button>
+        </>
+      )}
     </div>
   );
 }

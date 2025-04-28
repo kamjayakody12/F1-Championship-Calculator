@@ -30,7 +30,7 @@ export default async function HomePage() {
       <header className="flex items-center justify-between mb-6">
         <h1 className="text-4xl font-bold">F1 Championship Standings</h1>
         <Link
-          href="/admin/login">
+          href="/login">
           <Button variant ="outline">Admin Login</Button>
         </Link>
       </header>

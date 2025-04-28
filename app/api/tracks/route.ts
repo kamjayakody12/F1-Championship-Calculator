@@ -12,16 +12,32 @@ const ROUND_NAMES = [
   "Abu Dhabi"
 ];
 
-export async function GET() {
+export async function GET(request: Request) {
   await connectToDatabase();
-
-  // If no tracks exist yet, seed all 24
+  // 1) Seed on first call
   const count = await Track.countDocuments();
   if (count === 0) {
     await Track.insertMany(ROUND_NAMES.map((name) => ({ name })));
   }
+  // 2) If ?active=true, filter; else return all
+  const url = new URL(request.url);
+  const onlyActive = url.searchParams.get("active") === "true";
+  const filter = onlyActive ? { active: true } : {};
+  const tracks = await Track.find(filter).lean();
+  return NextResponse.json(tracks);
+}
 
-  // Return all tracks
-  const all = await Track.find({}).lean();
-  return NextResponse.json(all);
+export async function PUT(request: Request) {
+  await connectToDatabase();
+  const { id, active } = await request.json();
+  // Flip that track’s `active` flag
+  const updated = await Track.findByIdAndUpdate(
+    id,
+    { active: !!active },
+    { new: true }
+  );
+  if (!updated) {
+    return NextResponse.json({ error: "Track not found" }, { status: 404 });
+  }
+  return NextResponse.json(updated);
 }
