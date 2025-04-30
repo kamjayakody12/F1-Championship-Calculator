@@ -4,6 +4,13 @@
 import { useState, useEffect } from "react";
 import DataTable, { ResultRow } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 
 export default function AdminDashboardPage() {
   const [drivers, setDrivers] = useState<any[]>([]);
@@ -40,8 +47,7 @@ export default function AdminDashboardPage() {
   }, [drivers]);
 
   // 4️⃣ When the user picks a round, fetch saved results (or reset)
-  function handleTrackChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const track = e.target.value;
+  function handleTrackChange(track: string) {
     setSelectedTrack(track);
     if (!track) return;
 
@@ -120,18 +126,21 @@ export default function AdminDashboardPage() {
       {/* —───────── Track selector */}
       <div className="mb-4 max-w-sm">
         <label className="block mb-1 font-medium">Select Track</label>
-        <select
-          className="w-full border rounded px-3 py-2"
+        <Select
           value={selectedTrack}
-          onChange={handleTrackChange}
+          onValueChange={(value) => handleTrackChange(value)}
         >
-          <option value="">-- Select a Track --</option>
-          {tracks.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="-- Select a Track --" />
+          </SelectTrigger>
+          <SelectContent>
+            {tracks.map((t) => (
+              <SelectItem key={t} value={t}>
+                {t}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* —───────── Results table + Save */}
@@ -144,10 +153,7 @@ export default function AdminDashboardPage() {
             togglePole={togglePole}
             toggleFastestLap={toggleFastestLap}
           />
-          <Button
-            onClick={submitResults}
-            className="mt-4 bg-blue-600 text-white"
-          >
+          <Button onClick={submitResults} className="mt-4">
             Save Results
           </Button>
         </>

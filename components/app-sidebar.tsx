@@ -10,6 +10,9 @@ import {
   IconSettings,
   IconHelp,
   IconSearch,
+  IconClock,
+  IconTrack,
+  IconUsersGroup,
 } from "@tabler/icons-react"
 import { NavUser } from "@/components/nav-user"
 import {
@@ -43,12 +46,17 @@ const data = {
     {
       title: "Teams",
       url: "/admin/teams",
-      icon: IconListDetails,
+      icon: IconUsersGroup,
     },
     {
       title: "Tracks",
       url: "/admin/manage-tracks",
-      icon: IconFolder,
+      icon: IconTrack,
+    },
+    {
+      title: "Schedules",
+      url: "/admin/schedule",
+      icon: IconClock,
     },
   ],
   navSecondary: [
@@ -56,11 +64,6 @@ const data = {
       title: "Settings",
       url: "/admin/settings",
       icon: IconSettings,
-    },
-    {
-      title: "Help",
-      url: "/admin/help",
-      icon: IconHelp,
     },
   ],
 }
@@ -73,8 +76,8 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu className="list-none p-0 m-0">
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
-              <a href="/admin/dashboard" className="flex items-center gap-2 p-2">
-                <IconDashboard className="size-5" />
+              <a href="/admin" className="flex items-center gap-2 p-2">
+                {/*<IconDashboard className="size-100" />*/}
                 <span className="text-lg font-semibold">F1 Admin Dashboard</span>
               </a>
             </SidebarMenuButton>
