@@ -123,10 +123,3 @@
     @apply bg-background text-foreground;
   }
 }
-
-/* target your sidebar menu */
-.sidebar-nav ul {
-  list-style: none;   /* removes the bullets */
-  padding: 0;
-  margin: 0;
-}
