@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import Track from "@/models/Track";
 
-// Full F1 calendar
 const ROUND_NAMES = [
   "Australia", "China", "Japan", "Bahrain", "Saudi Arabia",
   "USA", "Italy", "Monaco", "Spain", "Canada", "Austria",
@@ -14,30 +13,28 @@ const ROUND_NAMES = [
 
 export async function GET(request: Request) {
   await connectToDatabase();
-  // 1) Seed on first call
-  const count = await Track.countDocuments();
-  if (count === 0) {
+
+  // seed on first ever call
+  if ((await Track.countDocuments()) === 0) {
     await Track.insertMany(ROUND_NAMES.map((name) => ({ name })));
   }
-  // 2) If ?active=true, filter; else return all
-  const url = new URL(request.url);
-  const onlyActive = url.searchParams.get("active") === "true";
-  const filter = onlyActive ? { active: true } : {};
-  const tracks = await Track.find(filter).lean();
+
+  const tracks = await Track.find({}).lean();
   return NextResponse.json(tracks);
+}
+
+export async function POST(request: Request) {
+  await connectToDatabase();
+  const { name, date } = await request.json();
+  const track = await Track.create({ name, date });
+  return NextResponse.json(track);
 }
 
 export async function PUT(request: Request) {
   await connectToDatabase();
-  const { id, active } = await request.json();
-  // Flip that track’s `active` flag
-  const updated = await Track.findByIdAndUpdate(
-    id,
-    { active: !!active },
-    { new: true }
-  );
-  if (!updated) {
-    return NextResponse.json({ error: "Track not found" }, { status: 404 });
-  }
+  const { id, date } = await request.json();
+  const updated = await Track.findByIdAndUpdate(id, { date }, { new: true });
+  if (!updated)
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(updated);
 }

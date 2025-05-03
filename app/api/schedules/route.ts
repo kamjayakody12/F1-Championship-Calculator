@@ -13,7 +13,7 @@ export async function GET() {
   // normalize to { trackId, name, date }
   return NextResponse.json(
     list.map((s) => ({
-      trackId: s.track._id.toString(),
+      trackId: (s.track as any)._id.toString(),
       name: (s.track as any).name,
       date: s.date.toISOString().slice(0, 10),
     }))

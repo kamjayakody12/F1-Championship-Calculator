@@ -1,100 +1,85 @@
-// app/admin/tracks/page.tsx
+// app/admin/schedule/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 
-interface Track {
+interface TrackRow {
   _id: string;
   name: string;
-}
-interface Schedule {
-  trackId: string;
-  date: string; // "YYYY-MM-DD"
-}
-interface TrackRow {
-  trackId: string;
-  name: string;
-  date: string;
+  date: string; // "YYYY-MM-DD" or ""
 }
 
 export default function ManageSchedulesPage() {
-  const [tracks, setTracks] = useState<Track[]>([]);
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [rows, setRows] = useState<TrackRow[]>([]);
+  const [tracks, setTracks] = useState<TrackRow[]>([]);
 
-  // 1) load all 24 tracks
   useEffect(() => {
-    fetch("/api/tracks")
-      .then((r) => r.json())
-      .then((data: Track[]) => setTracks(data));
+    async function load() {
+      // 1️⃣ load only the tracks you’ve marked “selected”
+      const selRes = await fetch("/api/selected-tracks");
+      const selected: { track: { _id: string; name: string } }[] = await selRes.json();
+
+      // 2️⃣ load any existing schedules for those tracks
+      const schedRes = await fetch("/api/schedules");
+      const schedules: { trackId: string; date: string }[] = await schedRes.json();
+      const dateMap = new Map(schedules.map((s) => [s.trackId, s.date]));
+
+      // 3️⃣ merge into our table rows
+      const rows: TrackRow[] = selected.map((s) => ({
+        _id: s.track._id,
+        name: s.track.name,
+        date: dateMap.get(s.track._id) || "",
+      }));
+
+      setTracks(rows);
+    }
+
+    load();
   }, []);
 
-  // 2) load existing schedules
-  useEffect(() => {
-    fetch("/api/schedules")
-      .then((r) => r.json())
-      .then((data: Schedule[]) => setSchedules(data));
-  }, []);
-
-  // 3) whenever tracks or schedules change, merge into rows
-  useEffect(() => {
-    if (!tracks.length) return;
-    const merged = tracks.map((t) => {
-      const sch = schedules.find((s) => s.trackId === t._id);
-      return {
-        trackId: t._id,
-        name: t.name,
-        date: sch?.date ?? new Date().toISOString().slice(0, 10),
-      };
-    });
-    setRows(merged);
-  }, [tracks, schedules]);
-
-  // 4) update one row’s date locally
-  function handleDateChange(trackId: string, newDate: string) {
-    setRows((prev) =>
-      prev.map((r) =>
-        r.trackId === trackId ? { ...r, date: newDate } : r
-      )
+  function handleDateChange(id: string, newIso: string) {
+    setTracks((prev) =>
+      prev.map((t) => (t._id === id ? { ...t, date: newIso } : t))
     );
   }
 
-  // 5) save all rows back to schedules endpoint
   async function saveAll() {
+    // upsert each schedule
     await Promise.all(
-      rows.map((r) =>
+      tracks.map((t) =>
         fetch("/api/schedules", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ trackId: r.trackId, date: r.date }),
+          body: JSON.stringify({ trackId: t._id, date: t.date }),
         })
       )
     );
     alert("Schedule saved!");
-    // refresh schedules from server
-    const fresh = await fetch("/api/schedules").then((r) => r.json());
-    setSchedules(fresh);
   }
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Manage Track Schedule</h1>
+    <div className="p-6 space-y-6">
+      <h1 className="text-2xl font-bold">Manage Track Schedule</h1>
+
       <table className="min-w-full border-collapse">
         <thead>
           <tr>
-            <th className="border p-2">Track</th>
-            <th className="border p-2">Date</th>
+            <th className="border p-2 text-left">Track</th>
+            <th className="border p-2 text-left">Date</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.trackId}>
-              <td className="border p-2">{r.name}</td>
+          {tracks.map((t) => (
+            <tr key={t._id}>
+              <td className="border p-2">{t.name}</td>
               <td className="border p-2">
                 <Popover>
                   <PopoverTrigger asChild>
@@ -103,19 +88,20 @@ export default function ManageSchedulesPage() {
                       className="w-[180px] justify-start text-left"
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {format(new Date(r.date), "PPP")}
+                      {t.date
+                        ? format(new Date(t.date), "PPP")
+                        : "Select date"}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
                       mode="single"
-                      selected={new Date(r.date)}
-                      onSelect={(d) => {
-                        if (d) {
-                          handleDateChange(
-                            r.trackId,
-                            d.toISOString().slice(0, 10)
-                          );
+                      selected={t.date ? new Date(t.date) : undefined}
+                      onSelect={(date) => {
+                        if (date) {
+                          // keep local YYYY-MM-DD to avoid timezone issues
+                          const iso = format(date, "yyyy-MM-dd");
+                          handleDateChange(t._id, iso);
                         }
                       }}
                       initialFocus
@@ -128,9 +114,7 @@ export default function ManageSchedulesPage() {
         </tbody>
       </table>
 
-      <Button className="mt-4" onClick={saveAll}>
-        Save Schedule
-      </Button>
+      <Button onClick={saveAll}>Save Schedule</Button>
     </div>
   );
 }

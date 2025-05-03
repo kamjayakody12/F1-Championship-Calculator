@@ -25,16 +25,16 @@ export default function AdminDashboardPage() {
       .then(setDrivers);
   }, []);
 
-  // 2️⃣ Load track names
+  // 2️⃣ ***NEW*** → Load only the tracks you chose
   useEffect(() => {
-    fetch("/api/tracks")
+    fetch("/api/selected-tracks")
       .then((r) => r.json())
-      .then((arr: { name: string }[]) =>
-        setTracks(arr.map((t) => t.name))
+      .then((arr: { track: { name: string } }[]) =>
+        setTracks(arr.map((s) => s.track.name))
       );
   }, []);
 
-  // 3️⃣ Seed empty results whenever driver list changes
+  // 3️⃣ Seed blank rows whenever drivers change
   useEffect(() => {
     setResults(
       Array.from({ length: drivers.length }, (_, i) => ({
@@ -46,11 +46,9 @@ export default function AdminDashboardPage() {
     );
   }, [drivers]);
 
-  // 4️⃣ When the user picks a round, fetch saved results (or reset)
   function handleTrackChange(track: string) {
     setSelectedTrack(track);
     if (!track) return;
-
     fetch(`/api/results?track=${encodeURIComponent(track)}`)
       .then((r) => r.json())
       .then((data: any[]) => {
@@ -64,6 +62,7 @@ export default function AdminDashboardPage() {
             }))
           );
         } else {
+          // reset empty if none saved
           setResults(
             Array.from({ length: drivers.length }, (_, i) => ({
               position: i + 1,
@@ -76,32 +75,26 @@ export default function AdminDashboardPage() {
       });
   }
 
-  // 5️⃣ Table callbacks
+  // 5️⃣ Table callbacks (unchanged)…
   function updateDriver(pos: number, id: string) {
     setResults((prev) =>
-      prev.map((r) =>
-        r.position === pos ? { ...r, driverId: id } : r
-      )
+      prev.map((r) => (r.position === pos ? { ...r, driverId: id } : r))
     );
   }
   function togglePole(pos: number) {
     setResults((prev) =>
-      prev.map((r) =>
-        r.position === pos ? { ...r, pole: !r.pole } : r
-      )
+      prev.map((r) => (r.position === pos ? { ...r, pole: !r.pole } : r))
     );
   }
   function toggleFastestLap(pos: number) {
     setResults((prev) =>
       prev.map((r) =>
-        r.position === pos
-          ? { ...r, fastestLap: !r.fastestLap }
-          : r
+        r.position === pos ? { ...r, fastestLap: !r.fastestLap } : r
       )
     );
   }
 
-  // 6️⃣ Submit back to your API
+  // 6️⃣ Submit results (unchanged)…
   async function submitResults() {
     if (!selectedTrack) {
       alert("Please select a track");
@@ -123,12 +116,12 @@ export default function AdminDashboardPage() {
     <div>
       <h1 className="text-4xl font-bold mb-6">Race Results</h1>
 
-      {/* —───────── Track selector */}
+      {/* Track selector now uses your saved list */}
       <div className="mb-4 max-w-sm">
         <label className="block mb-1 font-medium">Select Track</label>
         <Select
           value={selectedTrack}
-          onValueChange={(value) => handleTrackChange(value)}
+          onValueChange={handleTrackChange}
         >
           <SelectTrigger className="w-full">
             <SelectValue placeholder="-- Select a Track --" />
@@ -143,7 +136,7 @@ export default function AdminDashboardPage() {
         </Select>
       </div>
 
-      {/* —───────── Results table + Save */}
+      {/* Results table + Save */}
       {selectedTrack && results.length > 0 && (
         <>
           <DataTable
