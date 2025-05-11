@@ -68,30 +68,32 @@ export default function ManageSchedulesPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Manage Track Schedule</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        Manage Track Schedule
+      </h1>
 
-      <div className="overflow-x-auto bg-white rounded-lg border mb-6">
-        <table className="min-w-full divide-y divide-gray-200 table-auto">
-          <thead className="bg-gray-50">
+      <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-6">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600 table-auto">
+          <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                 Track
               </th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                 Date
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-600">
             {tracks.map((t) => (
               <tr
                 key={t._id}
-                className="hover:bg-gray-50 transition-colors"
+                className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {t.name}
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
@@ -114,7 +116,6 @@ export default function ManageSchedulesPage() {
                             handleDateChange(t._id, iso);
                           }
                         }}
-                        initialFocus
                       />
                     </PopoverContent>
                   </Popover>

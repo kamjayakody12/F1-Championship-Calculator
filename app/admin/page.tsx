@@ -19,7 +19,6 @@ interface ResultRow {
   fastestLap: boolean;
 }
 
-// Base points for positions 1–10
 const positionPointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
 export default function AdminDashboardPage() {
@@ -28,15 +27,8 @@ export default function AdminDashboardPage() {
   const [selectedTrack, setSelectedTrack] = useState<string>("");
   const [results, setResults] = useState<ResultRow[]>([]);
 
-  // 1️⃣ Fetch drivers for the dropdown
   useEffect(() => {
-    fetch("/api/drivers")
-      .then((r) => r.json())
-      .then(setDrivers);
-  }, []);
-
-  // 2️⃣ Fetch only the tracks you’ve selected
-  useEffect(() => {
+    fetch("/api/drivers").then((r) => r.json()).then(setDrivers);
     fetch("/api/selected-tracks")
       .then((r) => r.json())
       .then((arr: { track: { name: string } }[]) =>
@@ -44,10 +36,9 @@ export default function AdminDashboardPage() {
       );
   }, []);
 
-  // 3️⃣ Whenever drivers change, (re)seed an “empty” results set
   useEffect(() => {
     setResults(
-      Array.from({ length: drivers.length }, (_, i) => ({
+      drivers.map((_, i) => ({
         position: i + 1,
         driverId: "",
         pole: false,
@@ -56,16 +47,13 @@ export default function AdminDashboardPage() {
     );
   }, [drivers]);
 
-  // 4️⃣ Called when you pick a round
   function handleTrackChange(track: string) {
     setSelectedTrack(track);
     if (!track) return;
-
     fetch(`/api/results?track=${encodeURIComponent(track)}`)
       .then((r) => r.json())
       .then((data: any[]) => {
         if (data.length) {
-          // load saved rows
           setResults(
             data.map((row) => ({
               position: row.position,
@@ -75,9 +63,8 @@ export default function AdminDashboardPage() {
             }))
           );
         } else {
-          // no saved → reset empties
           setResults(
-            Array.from({ length: drivers.length }, (_, i) => ({
+            drivers.map((_, i) => ({
               position: i + 1,
               driverId: "",
               pole: false,
@@ -88,41 +75,28 @@ export default function AdminDashboardPage() {
       });
   }
 
-  // 5️⃣ Row‐level callbacks
   function updateDriver(pos: number, id: string) {
     setResults((prev) =>
-      prev.map((r) =>
-        r.position === pos ? { ...r, driverId: id } : r
-      )
+      prev.map((r) => (r.position === pos ? { ...r, driverId: id } : r))
     );
   }
   function togglePole(pos: number) {
     setResults((prev) =>
-      prev.map((r) =>
-        r.position === pos ? { ...r, pole: !r.pole } : r
-      )
+      prev.map((r) => (r.position === pos ? { ...r, pole: !r.pole } : r))
     );
   }
   function toggleFastestLap(pos: number) {
     setResults((prev) =>
       prev.map((r) =>
-        r.position === pos
-          ? { ...r, fastestLap: !r.fastestLap }
-          : r
+        r.position === pos ? { ...r, fastestLap: !r.fastestLap } : r
       )
     );
   }
 
-  // 6️⃣ Save everything
   async function submitResults() {
-    if (!selectedTrack) {
-      alert("Please select a track");
-      return;
-    }
-    if (results.some((r) => !r.driverId)) {
-      alert("Select a driver for every position");
-      return;
-    }
+    if (!selectedTrack) return alert("Please select a track");
+    if (results.some((r) => !r.driverId))
+      return alert("Select a driver for every position");
     await fetch("/api/results", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -131,7 +105,6 @@ export default function AdminDashboardPage() {
     alert("Results saved!");
   }
 
-  // compute total points
   function computePoints(r: ResultRow) {
     const base = r.position <= 10 ? positionPointsMapping[r.position - 1] : 0;
     return base + (r.pole ? 1 : 0) + (r.fastestLap ? 1 : 0);
@@ -139,11 +112,14 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-4xl font-bold mb-6">Race Results</h1>
+      <h1 className="text-4xl font-bold mb-6 text-gray-900 dark:text-gray-100">
+        Race Results
+      </h1>
 
-      {/* Track selector */}
       <div className="mb-6 max-w-sm">
-        <label className="block mb-2 font-medium">Select Track</label>
+        <label className="block mb-2 font-medium text-gray-700 dark:text-gray-300">
+          Select Track
+        </label>
         <Select value={selectedTrack} onValueChange={handleTrackChange}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="-- Select a Track --" />
@@ -158,30 +134,31 @@ export default function AdminDashboardPage() {
         </Select>
       </div>
 
-      {/* Only show table once a track is chosen */}
       {selectedTrack && (
         <>
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="min-w-full table-auto divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+            <table className="min-w-full table-auto divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr>
-                  {["Pos", "Driver", "Pole", "Fastest Lap", "Pts"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide sm:px-6 sm:py-3"
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  {["Pos", "Driver", "Pole", "Fastest Lap", "Pts"].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide sm:px-6 sm:py-3"
+                      >
+                        {h}
+                      </th>
+                    )
+                  )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-600">
                 {results.map((r) => (
                   <tr
                     key={r.position}
-                    className="hover:bg-gray-50 transition-colors sm:hover:bg-gray-100"
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors sm:hover:bg-gray-100"
                   >
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 sm:px-6">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 sm:px-6">
                       {r.position}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap sm:px-6">
@@ -201,21 +178,23 @@ export default function AdminDashboardPage() {
                         </SelectContent>
                       </Select>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm sm:px-6">
+                    <td className="px-4 py-3 whitespace-nowrap text-left sm:px-6">
                       <Checkbox
                         checked={r.pole}
                         onCheckedChange={() => togglePole(r.position)}
                         aria-label="Pole"
                       />
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm sm:px-6">
+                    <td className="px-4 py-3 whitespace-nowrap text-left sm:px-6">
                       <Checkbox
                         checked={r.fastestLap}
-                        onCheckedChange={() => toggleFastestLap(r.position)}
+                        onCheckedChange={() =>
+                          toggleFastestLap(r.position)
+                        }
                         aria-label="Fastest lap"
                       />
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-left text-sm font-medium text-gray-900 sm:px-6">
+                    <td className="px-4 py-3 whitespace-nowrap text-left text-sm font-medium text-gray-900 dark:text-gray-100 sm:px-6">
                       {computePoints(r)}
                     </td>
                   </tr>
@@ -223,7 +202,7 @@ export default function AdminDashboardPage() {
               </tbody>
             </table>
           </div>
-          <div className="mt-4 flex left">
+          <div className="mt-4">
             <Button onClick={submitResults}>Save Results</Button>
           </div>
         </>

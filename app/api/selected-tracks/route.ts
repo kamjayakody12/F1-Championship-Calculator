@@ -2,11 +2,11 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import SelectedTrack from "@/models/SelectedTrack";
-import Track from "@/models/Track";
+import Track from "@/models/Track";      // ← make sure this import is here!
 
 export async function GET() {
   await connectToDatabase();
-  // populate to return full track info
+  // now Mongoose knows about both models, so populate() will work
   const sel = await SelectedTrack.find().populate("track").lean();
   return NextResponse.json(
     sel.map((s) => ({ id: s._id, track: s.track }))
@@ -16,11 +16,14 @@ export async function GET() {
 export async function POST(request: Request) {
   await connectToDatabase();
   const { trackId } = await request.json();
-  // avoid duplicates
-  if (!(await SelectedTrack.exists({ track: trackId }))) {
-    await SelectedTrack.create({ track: trackId });
+  // ensure Track is registered before upserting
+  const trackObj = await Track.findById(trackId);
+  if (!trackObj) {
+    return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
-  return NextResponse.json({ success: true });
+  const newSel = await SelectedTrack.create({ track: trackObj._id });
+  const populated = await newSel.populate("track");
+  return NextResponse.json({ id: populated._id, track: populated.track });
 }
 
 export async function DELETE(request: Request) {

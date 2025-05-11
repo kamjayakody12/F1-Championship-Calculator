@@ -114,7 +114,9 @@ export default function AdminDriversPage() {
     <div className="p-6 space-y-6">
       {/* Header and Add-Driver Dialog */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Manage Drivers</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+          Manage Drivers
+        </h1>
 
         <Dialog>
           <DialogTrigger asChild>
@@ -191,25 +193,21 @@ export default function AdminDriversPage() {
       </div>
 
       {/* Drivers Table */}
-      <div className="overflow-x-auto bg-white rounded-lg border">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
+          <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Points
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Team
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
+              {["Name", "Points", "Team", "Actions"].map((h) => (
+                <th
+                  key={h}
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                >
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-600">
             {drivers.map((driver) => {
               const currentTeamId =
                 driver.team?._id?.toString() ??
@@ -217,9 +215,14 @@ export default function AdminDriversPage() {
               const driverAvailableTeams = getAvailableTeamsForDriver(driver);
 
               return (
-                <tr key={driver._id}>
-                  <td className="px-6 py-4 whitespace-nowrap">{driver.name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                <tr
+                  key={driver._id}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {driver.name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     {driver.points}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
