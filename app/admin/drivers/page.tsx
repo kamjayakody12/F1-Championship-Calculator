@@ -12,6 +12,15 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 // Magic constant for “no team” so our SelectItem value is never empty
 const NO_TEAM = "none";
@@ -19,7 +28,6 @@ const NO_TEAM = "none";
 export default function AdminDriversPage() {
   const [drivers, setDrivers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
-  const [showForm, setShowForm] = useState(false);
 
   // New driver form state
   const [driverName, setDriverName] = useState("");
@@ -38,7 +46,8 @@ export default function AdminDriversPage() {
       const assignedCount = drivers.filter(
         (d) =>
           d._id !== driver._id &&
-          (d.team?._id?.toString() === team._id.toString() || d.team === team._id)
+          (d.team?._id?.toString() === team._id.toString() ||
+           d.team === team._id)
       ).length;
       const isCurrent =
         driver.team?._id?.toString() === team._id.toString() ||
@@ -49,13 +58,13 @@ export default function AdminDriversPage() {
   const availableTeamsForNewDriver = teams.filter((team) => {
     const count = drivers.filter(
       (d) =>
-        (d.team?._id?.toString() === team._id.toString()) ||
+        d.team?._id?.toString() === team._id.toString() ||
         d.team === team._id
     ).length;
     return count < 2;
   });
 
-  // CRUD operations
+  // --- 1) ADD DRIVER ---
   async function addDriver(e?: React.FormEvent) {
     e?.preventDefault();
     if (!driverTeamId) {
@@ -78,6 +87,7 @@ export default function AdminDriversPage() {
     setDrivers(data);
   }
 
+  // --- 2) EDIT DRIVER’S TEAM ---
   async function updateDriverTeam(driverId: string, newTeamId: string) {
     const teamId = newTeamId === NO_TEAM ? null : newTeamId;
     await fetch("/api/drivers", {
@@ -89,6 +99,7 @@ export default function AdminDriversPage() {
     setDrivers(data);
   }
 
+  // --- 3) DELETE DRIVER ---
   async function deleteDriver(driverId: string) {
     await fetch("/api/drivers", {
       method: "DELETE",
@@ -101,67 +112,83 @@ export default function AdminDriversPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header and Add button */}
+      {/* Header and Add-Driver Dialog */}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Manage Drivers</h1>
-        <Button onClick={() => setShowForm((v) => !v)}>
-          {showForm ? "Cancel" : "Add Driver"}
-        </Button>
-      </div>
 
-      {/* Add Driver Form */}
-      {showForm && (
-        <form
-          onSubmit={addDriver}
-          className="space-y-4 bg-white p-4 rounded-lg border"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex flex-col space-y-1">
-              <Label htmlFor="driver-name">Name</Label>
-              <Input
-                id="driver-name"
-                placeholder="Driver Name"
-                value={driverName}
-                onChange={(e) => setDriverName(e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col space-y-1">
-              <Label htmlFor="starting-points">Starting Points</Label>
-              <Input
-                id="starting-points"
-                type="number"
-                placeholder="Starting Points"
-                value={driverPoints}
-                onChange={(e) => setDriverPoints(e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col space-y-1">
-              <Label htmlFor="team-select">Team</Label>
-              <Select
-                value={driverTeamId || NO_TEAM}
-                onValueChange={(val) =>
-                  setDriverTeamId(val === NO_TEAM ? "" : val)
-                }
-              >
-                <SelectTrigger id="team-select">
-                  <SelectValue placeholder="Select Team" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_TEAM}>Select Team</SelectItem>
-                  {availableTeamsForNewDriver.map((team) => (
-                    <SelectItem key={team._id} value={team._id}>
-                      {team.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <Button type="submit">Add Driver</Button>
-          </div>
-        </form>
-      )}
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="default">Add Driver</Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Add Driver</DialogTitle>
+              <DialogDescription>
+                Fill out the fields below to create a new driver.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={addDriver} className="grid gap-4 py-4">
+              {/* Name */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="driver-name" className="text-right">
+                  Name
+                </Label>
+                <Input
+                  id="driver-name"
+                  className="col-span-3"
+                  value={driverName}
+                  onChange={(e) => setDriverName(e.target.value)}
+                  placeholder="Driver Name"
+                  required
+                />
+              </div>
+              {/* Points */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="starting-points" className="text-right">
+                  Starting Points
+                </Label>
+                <Input
+                  id="starting-points"
+                  type="number"
+                  className="col-span-3"
+                  value={driverPoints}
+                  onChange={(e) => setDriverPoints(e.target.value)}
+                  placeholder="0"
+                  required
+                />
+              </div>
+              {/* Team */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="team-select" className="text-right">
+                  Team
+                </Label>
+                <Select
+                  value={driverTeamId || NO_TEAM}
+                  onValueChange={(val) =>
+                    setDriverTeamId(val === NO_TEAM ? "" : val)
+                  }
+                >
+                  <SelectTrigger id="team-select">
+                    <SelectValue placeholder="Select Team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_TEAM}>Select Team</SelectItem>
+                    {availableTeamsForNewDriver.map((team) => (
+                      <SelectItem key={team._id} value={team._id}>
+                        {team.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <DialogFooter>
+                <Button type="submit">Add Driver</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
 
       {/* Drivers Table */}
       <div className="overflow-x-auto bg-white rounded-lg border">
@@ -178,7 +205,7 @@ export default function AdminDriversPage() {
                 Team
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                
+                Actions
               </th>
             </tr>
           </thead>
@@ -192,7 +219,9 @@ export default function AdminDriversPage() {
               return (
                 <tr key={driver._id}>
                   <td className="px-6 py-4 whitespace-nowrap">{driver.name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{driver.points}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {driver.points}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <Select
                       value={currentTeamId}

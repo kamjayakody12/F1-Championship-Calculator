@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Track {
   _id: string;
@@ -83,28 +84,36 @@ export default function ManageTracksPage() {
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-4">Manage Season Tracks</h1>
 
-      <table className="min-w-full border-collapse mb-6">
-        <thead>
-          <tr>
-            <th className="border p-2 text-left">Round</th>
-            <th className="border p-2 text-center">Include?</th>
-          </tr>
-        </thead>
-        <tbody>
-          {allTracks.map((t) => (
-            <tr key={t._id}>
-              <td className="border p-2">{t.name}</td>
-              <td className="border p-2 text-center">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(t._id)}
-                  onChange={() => handleToggle(t._id)}
-                />
-              </td>
+      <div className="overflow-x-auto bg-white rounded-lg border mb-6">
+        <table className="min-w-full divide-y divide-gray-200 table-auto">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                Round
+              </th>
+              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                Include?
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {allTracks.map((t) => (
+              <tr key={t._id} className="hover:bg-gray-50 transition-colors">
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                  {t.name}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-center">
+                  <Checkbox
+                    checked={selectedIds.has(t._id)}
+                    onCheckedChange={() => handleToggle(t._id)}
+                    aria-label={`Include ${t.name}`}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <Button onClick={saveSeasonTracks} disabled={isSaving}>
         {isSaving ? "Saving..." : "Save Season Tracks"}
