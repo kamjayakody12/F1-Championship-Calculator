@@ -28,7 +28,7 @@ export default async function HomePage() {
   return (
     <div className="p-6">
       <header className="flex items-center justify-between mb-6">
-        <h1 className="text-4xl font-bold">F1 Championship Standings</h1>
+        <h1 className="text-4xl font-bold">F1 Esports Championship Standings</h1>
         <Link
           href="/login">
           <Button variant ="outline">Admin Login</Button>
