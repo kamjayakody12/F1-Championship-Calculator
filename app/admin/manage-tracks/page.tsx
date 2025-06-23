@@ -3,79 +3,88 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { SortableTrackItem } from "./SortableTrackItem"; // We'll create this next
 
-interface Track {
+export interface Track {
   _id: string;
   name: string;
 }
 
 export default function ManageTracksPage() {
-  // all rounds
   const [allTracks, setAllTracks] = useState<Track[]>([]);
-  // the original set we fetched from the server
-  const [initialSelected, setInitialSelected] = useState<Set<string>>(new Set());
-  // your UI toggles
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedTracks, setSelectedTracks] = useState<Track[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 1️⃣ on mount, load both collections
+  // Define sensors for dnd-kit
+  const sensors = useSensors(
+    useSensor(PointerSensor)
+  );
+
   useEffect(() => {
-    // load full calendar
+    // Load all available tracks
     fetch("/api/tracks")
       .then((r) => r.json())
       .then((tracks: Track[]) => setAllTracks(tracks));
 
-    // load only your picks
+    // Load the currently selected tracks for the season
     fetch("/api/selected-tracks")
       .then((r) => r.json())
       .then((arr: { track: Track }[]) => {
-        const sel = new Set(arr.map((s) => s.track._id));
-        setInitialSelected(sel);
-        setSelectedIds(new Set(sel));
+        const selected = arr.map((s) => s.track);
+        setSelectedTracks(selected);
       });
   }, []);
 
-  // 2️⃣ just update UI state when you click a checkbox
-  function handleToggle(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+  // Handles the reordering of tracks
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setSelectedTracks((items) => {
+        const oldIndex = items.findIndex((item) => item._id === active.id);
+        const newIndex = items.findIndex((item) => item._id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
   }
 
-  // 3️⃣ save everything at once
+  // Adds a track to the selected list
+  function addTrack(track: Track) {
+    if (!selectedTracks.find((t) => t._id === track._id)) {
+      setSelectedTracks([...selectedTracks, track]);
+    }
+  }
+
+  // Removes a track from the selected list
+  function removeTrack(trackId: string) {
+    setSelectedTracks(selectedTracks.filter((t) => t._id !== trackId));
+  }
+
+  // Saves the reordered and selected tracks
   async function saveSeasonTracks() {
     setIsSaving(true);
-    // compute diffs
-    const toAdd = Array.from(selectedIds).filter((id) => !initialSelected.has(id));
-    const toRemove = Array.from(initialSelected).filter((id) => !selectedIds.has(id));
+    const trackIds = selectedTracks.map((t) => t._id);
 
-    // batch POST additions
-    await Promise.all(
-      toAdd.map((trackId) =>
-        fetch("/api/selected-tracks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ trackId }),
-        })
-      )
-    );
+    // This PUT request should go to an endpoint that overwrites the existing list
+    await fetch("/api/selected-tracks", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trackIds }),
+    });
 
-    // batch DELETE removals
-    await Promise.all(
-      toRemove.map((trackId) =>
-        fetch("/api/selected-tracks", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ trackId }),
-        })
-      )
-    );
-
-    // reset initial to reflect saved state
-    setInitialSelected(new Set(selectedIds));
     setIsSaving(false);
     alert("Season tracks saved!");
   }
@@ -86,43 +95,58 @@ export default function ManageTracksPage() {
         Manage Season Tracks
       </h1>
 
-      <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-6">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600 table-auto">
-          <thead className="bg-gray-50 dark:bg-gray-700">
-            <tr>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
-                Round
-              </th>
-              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
-                Include?
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-600">
-            {allTracks.map((t) => (
-              <tr
-                key={t._id}
-                className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                  {t.name}
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap text-center">
-                  <Checkbox
-                    checked={selectedIds.has(t._id)}
-                    onCheckedChange={() => handleToggle(t._id)}
-                    aria-label={`Include ${t.name}`}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Column for Available Tracks */}
+        <div>
+          <h2 className="text-xl font-semibold mb-2">Available Tracks</h2>
+          <div className="overflow-auto bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 max-h-[500px]">
+            {allTracks
+              .filter(track => !selectedTracks.some(sel => sel._id === track._id))
+              .map((track) => (
+                <div
+                  key={track._id}
+                  className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-600"
+                >
+                  <span>{track.name}</span>
+                  <Button onClick={() => addTrack(track)} size="sm">
+                    Add
+                  </Button>
+                </div>
+              ))}
+          </div>
+        </div>
+
+        {/* Column for Selected Tracks */}
+        <div>
+          <h2 className="text-xl font-semibold mb-2">Selected Tracks (Drag to Reorder)</h2>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={selectedTracks.map(t => t._id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 max-h-[500px] overflow-auto">
+                {selectedTracks.map((track) => (
+                  <SortableTrackItem
+                    key={track._id}
+                    track={track}
+                    removeTrack={removeTrack}
                   />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        </div>
       </div>
 
-      <Button onClick={saveSeasonTracks} disabled={isSaving}>
-        {isSaving ? "Saving..." : "Save Season Tracks"}
-      </Button>
+      <div className="mt-6">
+        <Button onClick={saveSeasonTracks} disabled={isSaving || selectedTracks.length === 0}>
+          {isSaving ? "Saving..." : "Save Season Tracks"}
+        </Button>
+      </div>
     </div>
   );
 }
