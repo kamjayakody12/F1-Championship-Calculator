@@ -1,31 +1,30 @@
 // app/api/teams/route.ts
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/db";
-import Team from "@/models/Team";
+import { supabase } from "@/lib/db";
 
 export async function GET() {
-  await connectToDatabase();
-  const teams = await Team.find({}).lean();
+  const { data: teams, error } = await supabase.from('teams').select('*');
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(teams);
 }
 
 export async function POST(request: Request) {
-  await connectToDatabase();
   const { name } = await request.json();
-  const team = await Team.create({ name });
-  return NextResponse.json(team);
+  const { data, error } = await supabase.from('teams').insert([{ name }]).select().single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
 }
 
 export async function PUT(request: Request) {
-  await connectToDatabase();
   const { teamId, name } = await request.json();
-  const updatedTeam = await Team.findByIdAndUpdate(teamId, { name }, { new: true });
-  return NextResponse.json(updatedTeam);
+  const { data, error } = await supabase.from('teams').update({ name }).eq('id', teamId).select().single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
 }
 
 export async function DELETE(request: Request) {
-  await connectToDatabase();
   const { teamId } = await request.json();
-  await Team.findByIdAndDelete(teamId);
+  const { error } = await supabase.from('teams').delete().eq('id', teamId);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }

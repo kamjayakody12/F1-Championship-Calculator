@@ -19,33 +19,46 @@ export function SortableTrackItem({ track, removeTrack }: SortableTrackItemProps
     setNodeRef,
     transform,
     transition,
-  } = useSortable({ id: track._id });
+  } = useSortable({ id: track.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    cursor: 'grab', // To indicate it's draggable
+  };
+
+  const handleRemoveClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('Remove button clicked for track:', track.id); // Debug log
+    removeTrack(track.id);
   };
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 touch-none"
+      className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800"
     >
-      <span>{track.name}</span>
-      <Button
-        onClick={(e) => {
-          e.stopPropagation(); // prevent drag from starting on button click
-          removeTrack(track._id);
-        }}
-        size="sm"
-        variant="destructive"
+      {/* Drag area - only this part is draggable */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="flex-1 cursor-grab active:cursor-grabbing touch-none"
       >
-        Remove
-      </Button>
+        <span>{track.name}</span>
+      </div>
+      
+      {/* Button area - separate from drag area */}
+      <div className="ml-2">
+        <Button
+          onClick={handleRemoveClick}
+          size="sm"
+          variant="destructive"
+          className="touch-none"
+        >
+          Remove
+        </Button>
+      </div>
     </div>
   );
 }

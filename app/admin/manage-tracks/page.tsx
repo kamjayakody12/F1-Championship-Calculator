@@ -19,7 +19,7 @@ import {
 import { SortableTrackItem } from "./SortableTrackItem"; // We'll create this next
 
 export interface Track {
-  _id: string;
+  id: string;
   name: string;
 }
 
@@ -37,13 +37,18 @@ export default function ManageTracksPage() {
     // Load all available tracks
     fetch("/api/tracks")
       .then((r) => r.json())
-      .then((tracks: Track[]) => setAllTracks(tracks));
+      .then((tracks: Track[]) => {
+        console.log('Loaded all tracks:', tracks); // Debug log
+        setAllTracks(tracks);
+      });
 
     // Load the currently selected tracks for the season
     fetch("/api/selected-tracks")
       .then((r) => r.json())
       .then((arr: { track: Track }[]) => {
-        const selected = arr.map((s) => s.track);
+        console.log('Loaded selected tracks:', arr); // Debug log
+        const selected = arr.map((s) => s.track).filter(track => track && track.id && track.id.trim() !== '');
+        console.log('Filtered selected tracks:', selected); // Debug log
         setSelectedTracks(selected);
       });
   }, []);
@@ -54,8 +59,8 @@ export default function ManageTracksPage() {
 
     if (over && active.id !== over.id) {
       setSelectedTracks((items) => {
-        const oldIndex = items.findIndex((item) => item._id === active.id);
-        const newIndex = items.findIndex((item) => item._id === over.id);
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
         return arrayMove(items, oldIndex, newIndex);
       });
     }
@@ -63,30 +68,74 @@ export default function ManageTracksPage() {
 
   // Adds a track to the selected list
   function addTrack(track: Track) {
-    if (!selectedTracks.find((t) => t._id === track._id)) {
+    if (!selectedTracks.find((t) => t.id === track.id)) {
       setSelectedTracks([...selectedTracks, track]);
     }
   }
 
   // Removes a track from the selected list
   function removeTrack(trackId: string) {
-    setSelectedTracks(selectedTracks.filter((t) => t._id !== trackId));
+    console.log('Removing track with ID:', trackId); // Debug log
+    console.log('Selected tracks before removal:', selectedTracks); // Debug log
+    
+    const updatedTracks = selectedTracks.filter((t) => t.id !== trackId);
+    console.log('Selected tracks after removal:', updatedTracks); // Debug log
+    
+    setSelectedTracks(updatedTracks);
   }
 
   // Saves the reordered and selected tracks
   async function saveSeasonTracks() {
     setIsSaving(true);
-    const trackIds = selectedTracks.map((t) => t._id);
+    const trackIds = selectedTracks
+      .map((t) => t.id)
+      .filter(id => id && id.trim() !== ''); // Filter out empty IDs
 
-    // This PUT request should go to an endpoint that overwrites the existing list
-    await fetch("/api/selected-tracks", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ trackIds }),
-    });
+    console.log('Saving track IDs:', trackIds); // Debug log
 
-    setIsSaving(false);
-    alert("Season tracks saved!");
+    if (trackIds.length === 0) {
+      alert('No valid tracks to save. Please select some tracks first.');
+      setIsSaving(false);
+      return;
+    }
+
+    try {
+      // This PUT request should go to an endpoint that overwrites the existing list
+      const response = await fetch("/api/selected-tracks", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackIds }),
+      });
+
+      console.log('Response status:', response.status); // Debug log
+      console.log('Response headers:', Object.fromEntries(response.headers.entries())); // Debug log
+
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError); // Debug log
+          const textError = await response.text();
+          console.error('Raw error response:', textError); // Debug log
+          alert(`Error saving tracks: HTTP ${response.status} - ${textError}`);
+          return;
+        }
+        
+        console.error('API Error:', errorData); // Debug log
+        alert(`Error saving tracks: ${errorData.error || `HTTP ${response.status}`}`);
+        return;
+      }
+
+      const result = await response.json();
+      console.log('Save result:', result); // Debug log
+      alert("Season tracks saved!");
+    } catch (error) {
+      console.error('Network error:', error); // Debug log
+      alert(`Network error: ${error}`);
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -101,10 +150,10 @@ export default function ManageTracksPage() {
           <h2 className="text-xl font-semibold mb-2">Available Tracks</h2>
           <div className="overflow-auto bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 max-h-[500px]">
             {allTracks
-              .filter(track => !selectedTracks.some(sel => sel._id === track._id))
+              .filter(track => !selectedTracks.some(sel => sel.id === track.id))
               .map((track) => (
                 <div
-                  key={track._id}
+                  key={track.id}
                   className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-600"
                 >
                   <span>{track.name}</span>
@@ -125,13 +174,13 @@ export default function ManageTracksPage() {
             onDragEnd={handleDragEnd}
           >
             <SortableContext
-              items={selectedTracks.map(t => t._id)}
+              items={selectedTracks.map(t => t.id)}
               strategy={verticalListSortingStrategy}
             >
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 max-h-[500px] overflow-auto">
                 {selectedTracks.map((track) => (
                   <SortableTrackItem
-                    key={track._id}
+                    key={track.id}
                     track={track}
                     removeTrack={removeTrack}
                   />

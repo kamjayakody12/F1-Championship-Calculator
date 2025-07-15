@@ -1,12 +1,6 @@
-import mongoose, { Schema, Document } from "mongoose";
+// models/Team.ts
 
-export interface ITeam extends Document {
+export interface Team {
+  id: string; // UUID or serial, depending on Supabase schema
   name: string;
 }
-
-const TeamSchema: Schema = new Schema({
-  name: { type: String, required: true },
-});
-
-export default mongoose.models.Team ||
-  mongoose.model<ITeam>("Team", TeamSchema);

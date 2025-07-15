@@ -1,7 +1,6 @@
 // app/api/tracks/route.ts
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/db";
-import Track from "@/models/Track";
+import { supabase } from "@/lib/db";
 
 const ROUND_NAMES = [
   "Australia", "China", "Japan", "Bahrain", "Saudi Arabia",
@@ -12,29 +11,31 @@ const ROUND_NAMES = [
 ];
 
 export async function GET(request: Request) {
-  await connectToDatabase();
-
   // seed on first ever call
-  if ((await Track.countDocuments()) === 0) {
-    await Track.insertMany(ROUND_NAMES.map((name) => ({ name })));
+  const { count, error: countError } = await supabase.from('tracks').select('*', { count: 'exact', head: true });
+  if (countError) return NextResponse.json({ error: countError.message }, { status: 500 });
+  if (count === 0) {
+    const { error: insertError } = await supabase.from('tracks').insert(
+      ROUND_NAMES.map((name) => ({ name }))
+    );
+    if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
-
-  const tracks = await Track.find({}).lean();
+  const { data: tracks, error } = await supabase.from('tracks').select('*');
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(tracks);
 }
 
 export async function POST(request: Request) {
-  await connectToDatabase();
   const { name, date } = await request.json();
-  const track = await Track.create({ name, date });
-  return NextResponse.json(track);
+  const { data, error } = await supabase.from('tracks').insert([{ name, date }]).select().single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
 }
 
 export async function PUT(request: Request) {
-  await connectToDatabase();
   const { id, date } = await request.json();
-  const updated = await Track.findByIdAndUpdate(id, { date }, { new: true });
-  if (!updated)
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(updated);
+  const { data, error } = await supabase.from('tracks').update({ date }).eq('id', id).select().single();
+  if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
 }

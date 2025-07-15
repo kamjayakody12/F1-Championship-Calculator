@@ -1,15 +1,7 @@
 // models/Schedule.ts
-import mongoose from "mongoose";
 
-const ScheduleSchema = new mongoose.Schema({
-  track: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Track",
-    required: true,
-    unique: true,            // one schedule per track
-  },
-  date: { type: Date, required: true },
-});
-
-export default mongoose.models.Schedule ||
-  mongoose.model("Schedule", ScheduleSchema);
+export interface Schedule {
+  id: string; // UUID or serial, depending on Supabase schema
+  track: string; // track id (foreign key)
+  date: string; // ISO date string
+}
