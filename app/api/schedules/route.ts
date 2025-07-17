@@ -19,11 +19,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { trackId, date } = await request.json();
+  const { track, date } = await request.json();
   // Upsert by track id
   const { data, error } = await supabase
     .from('schedules')
-    .upsert([{ track: trackId, date }], { onConflict: 'track' })
+    .upsert([{ track, date }], { onConflict: 'track' })
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

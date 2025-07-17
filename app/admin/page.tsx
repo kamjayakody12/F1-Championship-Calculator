@@ -23,7 +23,7 @@ const positionPointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
 export default function AdminDashboardPage() {
   const [drivers, setDrivers] = useState<any[]>([]);
-  const [tracks, setTracks] = useState<string[]>([]);
+  const [tracks, setTracks] = useState<{ id: string; name: string }[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<string>("");
   const [results, setResults] = useState<ResultRow[]>([]);
 
@@ -31,44 +31,50 @@ export default function AdminDashboardPage() {
     fetch("/api/drivers").then((r) => r.json()).then(setDrivers);
     fetch("/api/selected-tracks")
       .then((r) => r.json())
-      .then((arr: { track: { name: string } }[]) =>
-        setTracks(arr.map((s) => s.track.name))
+      .then((arr: { track: { id: string; name: string } }[]) =>
+        setTracks(arr.map((s) => s.track))
       );
   }, []);
 
   useEffect(() => {
     setResults(
-      drivers.map((_, i) => ({
+      drivers.map((driver, i) => ({
         position: i + 1,
         driverId: "",
         pole: false,
         fastestLap: false,
+        currentPoints: driver.points || 0,
       }))
     );
   }, [drivers]);
 
-  function handleTrackChange(track: string) {
-    setSelectedTrack(track);
-    if (!track) return;
-    fetch(`/api/results?track=${encodeURIComponent(track)}`)
+  function handleTrackChange(trackId: string) {
+    setSelectedTrack(trackId);
+    if (!trackId) return;
+    fetch(`/api/results?track=${encodeURIComponent(trackId)}`)
       .then((r) => r.json())
       .then((data: any[]) => {
         if (data.length) {
           setResults(
-            data.map((row) => ({
-              position: row.position,
-              driverId: row.driver,
-              pole: row.pole,
-              fastestLap: row.fastestLap,
-            }))
+            data.map((row) => {
+              const driver = drivers.find((d) => d.id === row.driver);
+              return {
+                position: row.position,
+                driverId: row.driver,
+                pole: row.pole,
+                fastestLap: row.fastestLap,
+                currentPoints: driver ? driver.points : 0,
+              };
+            })
           );
         } else {
           setResults(
-            drivers.map((_, i) => ({
+            drivers.map((driver, i) => ({
               position: i + 1,
               driverId: "",
               pole: false,
               fastestLap: false,
+              currentPoints: driver.points || 0,
             }))
           );
         }
@@ -110,6 +116,18 @@ export default function AdminDashboardPage() {
     return base + (r.pole ? 1 : 0) + (r.fastestLap ? 1 : 0);
   }
 
+  // Helper to get available drivers for a given position (no duplicates)
+  function availableDrivers(currentPosition: number) {
+    return drivers.filter(
+      (d) =>
+        !results.some(
+          (r) =>
+            r.position !== currentPosition &&
+            r.driverId === d.id
+        )
+    );
+  }
+
   return (
     <div className="p-6">
       <h1 className="text-4xl font-bold mb-6 text-gray-900 dark:text-gray-100">
@@ -126,8 +144,8 @@ export default function AdminDashboardPage() {
           </SelectTrigger>
           <SelectContent>
             {tracks.map((t) => (
-              <SelectItem key={t} value={t}>
-                {t}
+              <SelectItem key={t.id} value={t.id}>
+                {t.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -170,8 +188,8 @@ export default function AdminDashboardPage() {
                           <SelectValue placeholder="Select…" />
                         </SelectTrigger>
                         <SelectContent>
-                          {drivers.map((d) => (
-                            <SelectItem key={d._id} value={d._id}>
+                          {availableDrivers(r.position).map((d) => (
+                            <SelectItem key={d.id} value={d.id}>
                               {d.name}
                             </SelectItem>
                           ))}

@@ -13,7 +13,7 @@ import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 
 interface TrackRow {
-  _id: string;
+  trackId: string;
   name: string;
   date: string; // "YYYY-MM-DD" or ""
 }
@@ -23,22 +23,22 @@ export default function ManageSchedulesPage() {
 
   useEffect(() => {
     async function load() {
-      // 1️⃣ load only the tracks you’ve marked “selected”
+      // load only the tracks you’ve marked “selected”
       const selRes = await fetch("/api/selected-tracks");
-      const selected: { track: { _id: string; name: string } }[] =
+      const selected: { track: { id: string; name: string } }[] =
         await selRes.json();
 
-      // 2️⃣ load any existing schedules for those tracks
+      // load any existing schedules for those tracks
       const schedRes = await fetch("/api/schedules");
       const schedules: { trackId: string; date: string }[] =
         await schedRes.json();
       const dateMap = new Map(schedules.map((s) => [s.trackId, s.date]));
 
-      // 3️⃣ merge into our table rows
+      // merge into our table rows
       const rows: TrackRow[] = selected.map((s) => ({
-        _id: s.track._id,
+        trackId: s.track.id,
         name: s.track.name,
-        date: dateMap.get(s.track._id) || "",
+        date: dateMap.get(s.track.id) || "",
       }));
 
       setTracks(rows);
@@ -46,9 +46,9 @@ export default function ManageSchedulesPage() {
     load();
   }, []);
 
-  function handleDateChange(id: string, newIso: string) {
+  function handleDateChange(trackId: string, newIso: string) {
     setTracks((prev) =>
-      prev.map((t) => (t._id === id ? { ...t, date: newIso } : t))
+      prev.map((t) => (t.trackId === trackId ? { ...t, date: newIso } : t))
     );
   }
 
@@ -59,7 +59,7 @@ export default function ManageSchedulesPage() {
         fetch("/api/schedules", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ trackId: t._id, date: t.date }),
+          body: JSON.stringify({ track: t.trackId, date: t.date }),
         })
       )
     );
@@ -87,7 +87,7 @@ export default function ManageSchedulesPage() {
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-600">
             {tracks.map((t) => (
               <tr
-                key={t._id}
+                key={t.trackId}
                 className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
@@ -113,7 +113,7 @@ export default function ManageSchedulesPage() {
                         onSelect={(date) => {
                           if (date) {
                             const iso = format(date, "yyyy-MM-dd");
-                            handleDateChange(t._id, iso);
+                            handleDateChange(t.trackId, iso);
                           }
                         }}
                       />

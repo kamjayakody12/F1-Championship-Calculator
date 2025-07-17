@@ -43,23 +43,25 @@ export default function AdminDriversPage() {
   // Helpers for controlling team assignments
   function getAvailableTeamsForDriver(driver: any) {
     return teams.filter((team) => {
+      if (!team || !team.id) return false;
       const assignedCount = drivers.filter(
         (d) =>
-          d._id !== driver._id &&
-          (d.team?._id?.toString() === team._id.toString() ||
-           d.team === team._id)
+          d.id !== driver.id &&
+          ((d.team && d.team.id && d.team.id.toString() === team.id.toString()) ||
+           d.team === team.id)
       ).length;
       const isCurrent =
-        driver.team?._id?.toString() === team._id.toString() ||
-        driver.team === team._id;
+        (driver.team && driver.team.id && driver.team.id.toString() === team.id.toString()) ||
+        driver.team === team.id;
       return isCurrent || assignedCount < 2;
     });
   }
   const availableTeamsForNewDriver = teams.filter((team) => {
+    if (!team || !team.id) return false;
     const count = drivers.filter(
       (d) =>
-        d.team?._id?.toString() === team._id.toString() ||
-        d.team === team._id
+        (d.team && d.team.id && d.team.id.toString() === team.id.toString()) ||
+        d.team === team.id
     ).length;
     return count < 2;
   });
@@ -174,9 +176,9 @@ export default function AdminDriversPage() {
                     <SelectValue placeholder="Select Team" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NO_TEAM}>Select Team</SelectItem>
+                    <SelectItem value={NO_TEAM} key={NO_TEAM}>Select Team</SelectItem>
                     {availableTeamsForNewDriver.map((team) => (
-                      <SelectItem key={team._id} value={team._id}>
+                      <SelectItem key={team.id} value={team.id}>
                         {team.name}
                       </SelectItem>
                     ))}
@@ -210,13 +212,13 @@ export default function AdminDriversPage() {
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-600">
             {drivers.map((driver) => {
               const currentTeamId =
-                driver.team?._id?.toString() ??
+                driver.team?.id?.toString() ??
                 (typeof driver.team === "string" ? driver.team : NO_TEAM);
               const driverAvailableTeams = getAvailableTeamsForDriver(driver);
 
               return (
                 <tr
-                  key={driver._id}
+                  key={driver.id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
@@ -229,16 +231,16 @@ export default function AdminDriversPage() {
                     <Select
                       value={currentTeamId}
                       onValueChange={(val) =>
-                        updateDriverTeam(driver._id, val)
+                        updateDriverTeam(driver.id, val)
                       }
                     >
                       <SelectTrigger size="sm">
                         <SelectValue placeholder="No Team" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={NO_TEAM}>No Team</SelectItem>
+                        <SelectItem value={NO_TEAM} key={NO_TEAM}>No Team</SelectItem>
                         {driverAvailableTeams.map((team: any) => (
-                          <SelectItem key={team._id} value={team._id}>
+                          <SelectItem key={team.id} value={team.id}>
                             {team.name}
                           </SelectItem>
                         ))}
@@ -249,7 +251,7 @@ export default function AdminDriversPage() {
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={() => deleteDriver(driver._id)}
+                      onClick={() => deleteDriver(driver.id)}
                     >
                       Delete
                     </Button>

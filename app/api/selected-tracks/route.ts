@@ -53,7 +53,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: `Invalid track IDs: ${invalidIds.join(', ')}` }, { status: 400 });
     }
 
-    // Remove all existing selected tracks
+  // Remove all existing selected tracks
     const { error: deleteError } = await supabase.from('selected_tracks').delete().not('id', 'is', null);
     if (deleteError) {
       console.error('Delete error:', deleteError); // Debug log
@@ -62,12 +62,12 @@ export async function PUT(request: Request) {
 
     console.log('Successfully deleted existing tracks'); // Debug log
 
-    // Insert the new selected tracks
-    const inserts = trackIds.map((trackId: string) => ({ track: trackId }));
+  // Insert the new selected tracks
+  const inserts = trackIds.map((trackId: string) => ({ track: trackId }));
     console.log('Inserting tracks:', inserts); // Debug log
     
-    if (inserts.length > 0) {
-      const { error: insertError } = await supabase.from('selected_tracks').insert(inserts);
+  if (inserts.length > 0) {
+    const { error: insertError } = await supabase.from('selected_tracks').insert(inserts);
       if (insertError) {
         console.error('Insert error:', insertError); // Debug log
         return NextResponse.json({ error: insertError.message }, { status: 500 });
@@ -75,9 +75,9 @@ export async function PUT(request: Request) {
       console.log('Successfully inserted new tracks'); // Debug log
     } else {
       console.log('No tracks to insert'); // Debug log
-    }
+  }
 
-    return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true });
   } catch (error) {
     console.error('PUT endpoint error:', error); // Debug log
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });

@@ -100,12 +100,12 @@ export default function ManageTracksPage() {
     }
 
     try {
-      // This PUT request should go to an endpoint that overwrites the existing list
+    // This PUT request should go to an endpoint that overwrites the existing list
       const response = await fetch("/api/selected-tracks", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackIds }),
-      });
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trackIds }),
+    });
 
       console.log('Response status:', response.status); // Debug log
       console.log('Response headers:', Object.fromEntries(response.headers.entries())); // Debug log
@@ -134,7 +134,7 @@ export default function ManageTracksPage() {
       console.error('Network error:', error); // Debug log
       alert(`Network error: ${error}`);
     } finally {
-      setIsSaving(false);
+    setIsSaving(false);
     }
   }
 
