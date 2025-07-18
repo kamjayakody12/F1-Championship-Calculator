@@ -14,7 +14,7 @@ import {
   IconTrack,
   IconUsersGroup,
 } from "@tabler/icons-react"
-import { NavUser } from "@/components/nav-user"
+import { NavUser } from "@/components/admin-nav-user"
 import {
   Sidebar,
   SidebarHeader,

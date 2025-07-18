@@ -1,11 +1,9 @@
-// app/admin/layout.tsx
 "use client";
 
 import * as React from "react";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/admin-sidebar";
+import { AppSidebar } from "@/components/public-sidebar";
 import { SiteHeader } from "@/components/site-header";
-// ← import your ThemeProvider
 import { ThemeProvider } from "@/components/theme-provider";
 
 export default function AdminLayout({
@@ -24,13 +22,13 @@ export default function AdminLayout({
         } as React.CSSProperties}
       >
         {/* your off-canvas/fixed sidebar */}
-        <AppSidebar variant="inset" />
+        <AppSidebar variant="sidebar" />
 
         {/* the rest of the page */}
-        <SidebarInset className="flex flex-col min-h-screen">
+        <SidebarInset>
           <SiteHeader />
 
-          <main className="flex-1 p-6 overflow-auto">{children}</main>
+          <main >{children}</main>
         </SidebarInset>
       </SidebarProvider>
     </ThemeProvider>
