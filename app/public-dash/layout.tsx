@@ -3,7 +3,7 @@
 import * as React from "react";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/public-sidebar";
-import { SiteHeader } from "@/components/site-header";
+import { SiteHeader } from "@/components/public-site-header";
 import { ThemeProvider } from "@/components/theme-provider";
 
 export default function AdminLayout({

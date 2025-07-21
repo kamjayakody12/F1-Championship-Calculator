@@ -43,46 +43,41 @@ const data = {
       name: "F1 Championship Dashboard",
       logo: GalleryVerticalEnd,
     },
-    {
-      name: "Admin Dashboard",
-      logo: AudioWaveform,
-      url: "/login",
-    },
   ],
   navMain: [
     {
       title: "Home",
-      url: "#",
+      url: "/public-dash",
       icon: HomeIcon,
     },
     {
       title: "Results",
-      url: "#",
+      url: "/public-dash/results",
       icon: ClipboardCheckIcon,
     },
     {
       title: "Drivers Stats",
-      url: "#",
+      url: "/public-dash/driver-stats",
       icon: IconGraph,
     },
     {
       title: "Driver Standings",
-      url: "#",
+      url: "/public-dash/driver-standings",
       icon: Trophy,
     },
     {
       title: "Constructor Standings",
-      url: "#",
+      url: "/public-dash/constructor-standings",
       icon: Crown,
     },
     {
       title: "Teams",
-      url: "#",
+      url: "/public-dash/teams",
       icon: IconUsersGroup,
     },     
     {
       title: "Drivers",
-      url: "#",
+      url: "/public-dash/driver",
       icon: IconUser,
     },  
   ],

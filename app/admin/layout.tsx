@@ -4,7 +4,7 @@
 import * as React from "react";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/admin-sidebar";
-import { SiteHeader } from "@/components/site-header";
+import { SiteHeader } from "@/components/admin-site-header";
 // ← import your ThemeProvider
 import { ThemeProvider } from "@/components/theme-provider";
 

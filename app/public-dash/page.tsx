@@ -1,6 +1,15 @@
 import Link from "next/link";
 import { supabase } from "@/lib/db";
 import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { ArrowUp, ArrowDown } from "lucide-react";
 
 export default async function HomePage() {
   // Fetch drivers and teams from Supabase
@@ -25,38 +34,120 @@ export default async function HomePage() {
     return { ...team, constructorPoints };
   });
 
+  // Sort drivers and teams by points descending
+  const sortedDrivers = [...(drivers || [])].sort((a, b) => (b.points || 0) - (a.points || 0));
+  const sortedTeams = [...teams].sort((a, b) => (b.constructorPoints || 0) - (a.constructorPoints || 0));
+
+  // MOCK: Previous order (for demo, shuffle the current order)
+  const prevDriverOrder = [...sortedDrivers].sort(() => Math.random() - 0.5).map(d => d.id);
+  const prevTeamOrder = [...sortedTeams].sort(() => Math.random() - 0.5).map(t => t.id);
+
+  function getEvolution(currentIndex: number, prevIndex: number | undefined) {
+    if (prevIndex === undefined) return { value: "—", color: "text-gray-400", icon: null };
+    const diff = prevIndex - currentIndex;
+    if (diff > 0) {
+      return { value: `+${diff}`, color: "text-green-600", icon: <ArrowUp className="inline w-4 h-4" /> };
+    }
+    if (diff < 0) {
+      return { value: `${diff}`, color: "text-red-600", icon: <ArrowDown className="inline w-4 h-4" /> };
+    }
+    return { value: "—", color: "text-gray-400", icon: null };
+  }
+
   return (
-    <div className="p-6">
-      <header className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-8">
+      {/* <header className="flex items-center justify-between mb-8">
         <h1 className="text-4xl font-bold">F1 Esports Championship Standings</h1>
         <Link href="/login">
-          <Button variant ="outline">Admin Login</Button>
+          <Button variant="outline">Admin Login</Button>
         </Link>
-      </header>
-
-      <section>
-        <h2 className="text-2xl font-semibold">Drivers</h2>
-        <ul>
-          {(drivers || []).map((driver: any) => (
-            <li key={driver.id}>
-              <strong>{driver.name}</strong> -{" "}
-              {driver.teams ? driver.teams.name : "No Team"} - {driver.points}{" "}
-              points
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="mt-8">
-        <h2 className="text-2xl font-semibold">Constructors</h2>
-        <ul>
-          {teams.map((team: any) => (
-            <li key={team.id}>
-              <strong>{team.name}</strong> - {team.constructorPoints} points
-            </li>
-          ))}
-        </ul>
-      </section>
+      </header> */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Drivers Table */}
+        <section>
+          <h2 className="text-2xl font-semibold mb-4">Driver Standings</h2>
+          <div className="bg-white dark:bg-card rounded-2xl shadow border border-gray-200 dark:border-border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">POS.</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">DRIVER</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">POINTS</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">EVO.</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedDrivers.map((driver: any, idx: number) => {
+                  const prevIdx = prevDriverOrder.indexOf(driver.id);
+                  const evo = getEvolution(idx, prevIdx);
+                  return (
+                    <TableRow key={driver.id} className="border-b border-gray-100 dark:border-border last:border-0 hover:bg-gray-50 dark:hover:bg-muted/30 transition">
+                      <TableCell className="py-3 px-4 font-semibold text-gray-700 dark:text-gray-100">{idx + 1}</TableCell>
+                      <TableCell className="py-3 px-4 flex items-center gap-3">
+                        {/* Placeholder for driver logo */}
+                        <span className="inline-block w-7 h-7 bg-gray-200 dark:bg-muted rounded-full flex-shrink-0" />
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{driver.name}</span>
+                      </TableCell>
+                      <TableCell className="py-3 px-4 font-bold text-gray-900 dark:text-gray-100">{driver.points}</TableCell>
+                      <TableCell className={`py-3 px-4 font-medium flex items-center gap-1 ${evo.color}`}>{evo.icon}{evo.value}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+            <div className="flex justify-center p-4">
+              <Link href="/public-dash/driver-standings">
+                <Button variant="ghost" className="text-primary font-semibold flex items-center gap-1">
+                  Full Standings
+                  <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </section>
+        {/* Constructors Table */}
+        <section>
+          <h2 className="text-2xl font-semibold mb-4">Constructor Standings</h2>
+          <div className="bg-white dark:bg-card rounded-2xl shadow border border-gray-200 dark:border-border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">POS.</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">CONSTRUCTOR</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">POINTS</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">EVO.</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedTeams.map((team: any, idx: number) => {
+                  const prevIdx = prevTeamOrder.indexOf(team.id);
+                  const evo = getEvolution(idx, prevIdx);
+                  return (
+                    <TableRow key={team.id} className="border-b border-gray-100 dark:border-border last:border-0 hover:bg-gray-50 dark:hover:bg-muted/30 transition">
+                      <TableCell className="py-3 px-4 font-semibold text-gray-700 dark:text-gray-100">{idx + 1}</TableCell>
+                      <TableCell className="py-3 px-4 flex items-center gap-3">
+                        {/* Placeholder for team logo */}
+                        <span className="inline-block w-7 h-7 bg-gray-200 dark:bg-muted rounded-full flex-shrink-0" />
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{team.name}</span>
+                      </TableCell>
+                      <TableCell className="py-3 px-4 font-bold text-gray-900 dark:text-gray-100">{team.constructorPoints}</TableCell>
+                      <TableCell className={`py-3 px-4 font-medium flex items-center gap-1 ${evo.color}`}>{evo.icon}{evo.value}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+            <div className="flex justify-center p-4">
+              <Link href="/public-dash/constructor-standings">
+                <Button variant="ghost" className="text-primary font-semibold flex items-center gap-1">
+                  Full Standings
+                  <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
