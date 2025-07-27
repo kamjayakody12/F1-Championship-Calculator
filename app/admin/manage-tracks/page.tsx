@@ -17,6 +17,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { SortableTrackItem } from "./SortableTrackItem"; // We'll create this next
+import { toast } from "sonner";
+
 
 export interface Track {
   id: string;
@@ -94,7 +96,7 @@ export default function ManageTracksPage() {
     console.log('Saving track IDs:', trackIds); // Debug log
 
     if (trackIds.length === 0) {
-      alert('No valid tracks to save. Please select some tracks first.');
+      toast.error('No valid tracks to save. Please select some tracks first.');
       setIsSaving(false);
       return;
     }
@@ -118,21 +120,21 @@ export default function ManageTracksPage() {
           console.error('Failed to parse error response:', parseError); // Debug log
           const textError = await response.text();
           console.error('Raw error response:', textError); // Debug log
-          alert(`Error saving tracks: HTTP ${response.status} - ${textError}`);
+          toast.error(`Error saving tracks: HTTP ${response.status} - ${textError}`);
           return;
         }
         
         console.error('API Error:', errorData); // Debug log
-        alert(`Error saving tracks: ${errorData.error || `HTTP ${response.status}`}`);
+        toast.error(`Error saving tracks: ${errorData.error || `HTTP ${response.status}`}`);
         return;
       }
 
       const result = await response.json();
       console.log('Save result:', result); // Debug log
-      alert("Season tracks saved!");
+      toast.success("Season tracks saved!");
     } catch (error) {
       console.error('Network error:', error); // Debug log
-      alert(`Network error: ${error}`);
+      toast.error(`Network error: ${error}`);
     } finally {
     setIsSaving(false);
     }

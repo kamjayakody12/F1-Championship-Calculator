@@ -21,6 +21,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 // Magic constant for “no team” so our SelectItem value is never empty
 const NO_TEAM = "none";
@@ -31,7 +32,6 @@ export default function AdminDriversPage() {
 
   // New driver form state
   const [driverName, setDriverName] = useState("");
-  const [driverPoints, setDriverPoints] = useState("");
   const [driverTeamId, setDriverTeamId] = useState("");
 
   // Fetch drivers & teams on mount
@@ -70,20 +70,27 @@ export default function AdminDriversPage() {
   async function addDriver(e?: React.FormEvent) {
     e?.preventDefault();
     if (!driverTeamId) {
-      alert("Please select a team.");
+      toast.error("Please select a team.");
       return;
     }
-    await fetch("/api/drivers", {
+    const res = await fetch("/api/drivers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: driverName,
-        points: Number(driverPoints),
         teamId: driverTeamId,
       }),
     });
+    if (!res.ok) {
+      let errorMsg = "Unknown error";
+      try {
+        const errorData = await res.json();
+        errorMsg = errorData.error || errorMsg;
+      } catch (e) {}
+      toast.error("Failed to add driver: " + errorMsg);
+      return;
+    }
     setDriverName("");
-    setDriverPoints("");
     setDriverTeamId("");
     const data = await fetch("/api/drivers").then((r) => r.json());
     setDrivers(data);
@@ -92,11 +99,20 @@ export default function AdminDriversPage() {
   // --- 2) EDIT DRIVER’S TEAM ---
   async function updateDriverTeam(driverId: string, newTeamId: string) {
     const teamId = newTeamId === NO_TEAM ? null : newTeamId;
-    await fetch("/api/drivers", {
+    const res = await fetch("/api/drivers", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ driverId, teamId }),
     });
+    if (!res.ok) {
+      let errorMsg = "Unknown error";
+      try {
+        const errorData = await res.json();
+        errorMsg = errorData.error || errorMsg;
+      } catch (e) {}
+      toast.error("Failed to update driver: " + errorMsg);
+      return;
+    }
     const data = await fetch("/api/drivers").then((r) => r.json());
     setDrivers(data);
   }
@@ -155,21 +171,6 @@ export default function AdminDriversPage() {
                   value={driverName}
                   onChange={(e) => setDriverName(e.target.value)}
                   placeholder="Driver Name"
-                  required
-                />
-              </div>
-              {/* Points */}
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="starting-points" className="text-right">
-                  Starting Points
-                </Label>
-                <Input
-                  id="starting-points"
-                  type="number"
-                  className="col-span-3"
-                  value={driverPoints}
-                  onChange={(e) => setDriverPoints(e.target.value)}
-                  placeholder="0"
                   required
                 />
               </div>

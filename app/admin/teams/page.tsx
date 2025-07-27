@@ -33,10 +33,6 @@ export default function AdminTeamsPage() {
   // 2️⃣ Add team
   async function addTeam(e?: React.FormEvent) {
     e?.preventDefault();
-    if (!teamName.trim()) {
-      alert("Please enter a team name.");
-      return;
-    }
     const res = await fetch("/api/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

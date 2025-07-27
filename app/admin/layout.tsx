@@ -7,6 +7,8 @@ import { AppSidebar } from "@/components/admin-sidebar";
 import { SiteHeader } from "@/components/admin-site-header";
 // ← import your ThemeProvider
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner"
+
 
 export default function AdminLayout({
   children,
@@ -29,7 +31,7 @@ export default function AdminLayout({
         {/* the rest of the page */}
         <SidebarInset className="flex flex-col min-h-screen">
           <SiteHeader />
-
+          <Toaster position="top-center" />
           <main className="flex-1 p-6 overflow-auto">{children}</main>
         </SidebarInset>
       </SidebarProvider>

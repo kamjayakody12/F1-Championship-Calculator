@@ -38,7 +38,7 @@ export async function POST(request: Request) {
         position: row.position,
         driver: row.driverId,
         pole: row.pole,
-        fastestlap: row.fastestLap,
+        fastestLap: row.fastestLap,
       },
     ]);
     if (insertError) {
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     console.log(`Inserted result for driver ${row.driverId}, updated points to ${currentPoints + totalPoints}`);
   }
 
-  // Update constructor (team) points: sum of both drivers' points
+  // Constructors calculation
   // 1. Fetch all teams
   const { data: teams, error: teamsError } = await supabase.from("teams").select("id");
   if (teamsError) {

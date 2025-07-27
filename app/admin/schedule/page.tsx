@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/popover";
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
+
 
 interface TrackRow {
   trackId: string;
@@ -63,7 +65,7 @@ export default function ManageSchedulesPage() {
         })
       )
     );
-    alert("Schedule saved!");
+    toast.success("Schedule saved!");
   }
 
   return (

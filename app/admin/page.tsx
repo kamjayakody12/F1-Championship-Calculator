@@ -11,6 +11,8 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "sonner";
+
 
 interface ResultRow {
   position: number;
@@ -102,13 +104,13 @@ export default function AdminDashboardPage() {
   async function submitResults() {
     if (!selectedTrack) return alert("Please select a track");
     if (results.some((r) => !r.driverId))
-      return alert("Select a driver for every position");
+      return toast.error("Select a driver for every position");
     await fetch("/api/results", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ track: selectedTrack, results }),
     });
-    alert("Results saved!");
+    toast.success("Results saved!");
   }
 
   function computePoints(r: ResultRow) {
