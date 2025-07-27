@@ -103,13 +103,25 @@ export default function AdminDriversPage() {
 
   // --- 3) DELETE DRIVER ---
   async function deleteDriver(driverId: string) {
-    await fetch("/api/drivers", {
+    console.log("Attempting to delete driver with id:", driverId); // Debug log
+    const res = await fetch("/api/drivers", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ driverId }),
     });
-    const data = await fetch("/api/drivers").then((r) => r.json());
-    setDrivers(data);
+    if (res.ok) {
+      const data = await fetch("/api/drivers").then((r) => r.json());
+      setDrivers(data);
+    } else {
+      let errorMsg = "Unknown error";
+      try {
+        const errorData = await res.json();
+        errorMsg = errorData.error || errorMsg;
+      } catch (e) {
+        // ignore JSON parse error
+      }
+      alert("Failed to delete driver: " + errorMsg);
+    }
   }
 
   return (

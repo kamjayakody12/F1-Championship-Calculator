@@ -50,6 +50,7 @@ export default function AdminTeamsPage() {
 
   // 3️⃣ Delete team
   async function deleteTeam(teamId: string) {
+    console.log("Attempting to delete team with id:", teamId); // Debug log
     const res = await fetch("/api/teams", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -57,6 +58,15 @@ export default function AdminTeamsPage() {
     });
     if (res.ok) {
       fetchTeams();
+    } else {
+      let errorMsg = "Unknown error";
+      try {
+        const errorData = await res.json();
+        errorMsg = errorData.error || errorMsg;
+      } catch (e) {
+        // ignore JSON parse error
+      }
+      alert("Failed to delete team: " + errorMsg);
     }
   }
 

@@ -24,7 +24,24 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   const { teamId } = await request.json();
+  console.log("Deleting team with id:", teamId);
+
+  // Set 'team' to null for all drivers assigned to this team
+  const { error: driverUpdateError } = await supabase
+    .from('drivers')
+    .update({ team: null })
+    .eq('team', teamId);
+
+  if (driverUpdateError) {
+    console.error("Failed to update drivers:", driverUpdateError);
+    return NextResponse.json({ error: driverUpdateError.message }, { status: 500 });
+  }
+
+  // Now delete the team
   const { error } = await supabase.from('teams').delete().eq('id', teamId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("Supabase delete error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ success: true });
 }
