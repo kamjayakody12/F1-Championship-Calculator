@@ -6,5 +6,5 @@ export interface Result {
   position: number;
   driver: string; // driver id (foreign key)
   pole: boolean;
-  fastestLap: boolean;
+  fastestlap: boolean;
 }

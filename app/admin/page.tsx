@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import type { Rules } from "@/models/Rules";
 
 
 interface ResultRow {
@@ -28,6 +29,7 @@ export default function AdminDashboardPage() {
   const [tracks, setTracks] = useState<{ id: string; name: string }[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<string>("");
   const [results, setResults] = useState<ResultRow[]>([]);
+  const [rules, setRules] = useState<Rules | null>(null);
 
   useEffect(() => {
     fetch("/api/drivers").then((r) => r.json()).then(setDrivers);
@@ -36,6 +38,12 @@ export default function AdminDashboardPage() {
       .then((arr: { track: { id: string; name: string } }[]) =>
         setTracks(arr.map((s) => s.track))
       );
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/rules")
+      .then((r) => r.json())
+      .then(setRules);
   }, []);
 
   useEffect(() => {
@@ -63,8 +71,8 @@ export default function AdminDashboardPage() {
               return {
                 position: row.position,
                 driverId: row.driver,
-                pole: row.pole,
-                fastestLap: row.fastestLap,
+                pole: !!row.pole, // ensure boolean
+                fastestLap: !!(row.fastestLap ?? row.fastestlap), // ensure boolean, support both keys
                 currentPoints: driver ? driver.points : 0,
               };
             })
@@ -114,8 +122,12 @@ export default function AdminDashboardPage() {
   }
 
   function computePoints(r: ResultRow) {
+    if (!rules) return 0;
     const base = r.position <= 10 ? positionPointsMapping[r.position - 1] : 0;
-    return base + (r.pole ? 1 : 0) + (r.fastestLap ? 1 : 0);
+    const bonus =
+      (rules.poleGivesPoint && r.pole ? 1 : 0) +
+      (rules.fastestLapGivesPoint && r.fastestLap ? 1 : 0);
+    return base + bonus;
   }
 
   // Helper to get available drivers for a given position (no duplicates)
@@ -154,7 +166,7 @@ export default function AdminDashboardPage() {
         </Select>
       </div>
 
-      {selectedTrack && (
+      {selectedTrack && rules && (
         <>
           <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
             <table className="min-w-full table-auto divide-y divide-gray-200 dark:divide-gray-700">
@@ -183,13 +195,14 @@ export default function AdminDashboardPage() {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap sm:px-6">
                       <Select
-                        value={r.driverId}
-                        onValueChange={(id) => updateDriver(r.position, id)}
+                        value={r.driverId || "none"}
+                        onValueChange={(id) => updateDriver(r.position, id === "none" ? "" : id)}
                       >
                         <SelectTrigger className="w-40 text-sm sm:w-48">
                           <SelectValue placeholder="Select…" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="none">-- None --</SelectItem>
                           {availableDrivers(r.position).map((d) => (
                             <SelectItem key={d.id} value={d.id}>
                               {d.name}
@@ -198,23 +211,21 @@ export default function AdminDashboardPage() {
                         </SelectContent>
                       </Select>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-left sm:px-6">
+                    <td className="px-4 py-3 text-center sm:px-6">
                       <Checkbox
-                        checked={r.pole}
+                        checked={!!r.pole}
                         onCheckedChange={() => togglePole(r.position)}
                         aria-label="Pole"
                       />
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-left sm:px-6">
+                    <td className="px-4 py-3 text-center sm:px-6">
                       <Checkbox
-                        checked={r.fastestLap}
-                        onCheckedChange={() =>
-                          toggleFastestLap(r.position)
-                        }
-                        aria-label="Fastest lap"
+                        checked={!!r.fastestLap}
+                        onCheckedChange={() => toggleFastestLap(r.position)}
+                        aria-label="Fastest Lap"
                       />
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-left text-sm font-medium text-gray-900 dark:text-gray-100 sm:px-6">
+                    <td className="px-4 py-3 text-center sm:px-6">
                       {computePoints(r)}
                     </td>
                   </tr>

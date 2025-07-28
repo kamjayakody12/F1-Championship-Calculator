@@ -25,11 +25,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: deleteError.message }, { status: 500 });
   }
 
+  // Fetch rules for bonus points
+  const { data: rules, error: rulesError } = await supabase
+    .from('rules')
+    .select('polegivespoint, fastestlapgivespoint')
+    .eq('id', 1)
+    .single();
+  if (rulesError) {
+    console.error('Error fetching rules:', rulesError);
+    return NextResponse.json({ error: rulesError.message }, { status: 500 });
+  }
+
   // Update driver points (fetching current points from DB)
   for (const row of results) {
     if (!row.driverId) continue;
     const basePoints = row.position <= 10 ? positionPointsMapping[row.position - 1] : 0;
-    const bonusPoints = (row.pole ? 1 : 0) + (row.fastestLap ? 1 : 0);
+    const bonusPoints = (rules.polegivespoint && row.pole ? 1 : 0) + (rules.fastestlapgivespoint && row.fastestLap ? 1 : 0);
     const totalPoints = basePoints + bonusPoints;
     // Save the race result
     const { error: insertError } = await supabase.from("results").insert([
@@ -38,7 +49,7 @@ export async function POST(request: Request) {
         position: row.position,
         driver: row.driverId,
         pole: row.pole,
-        fastestLap: row.fastestLap,
+        fastestlap: row.fastestLap, // use lowercase column name
       },
     ]);
     if (insertError) {

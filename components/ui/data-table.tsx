@@ -24,8 +24,13 @@ export interface ResultRow {
 // Points mapping for finishing positions 1 to 10
 const positionPointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
+export interface Rules {
+  poleGivesPoint: boolean;
+  fastestLapGivesPoint: boolean;
+}
+
 // Inline column definitions
-const columns = [
+const columns = (rules: Rules) => [
   {
     accessorKey: "position",
     header: "Pos",
@@ -94,7 +99,7 @@ const columns = [
     cell: ({ row }: any) => {
       const { position, pole, fastestLap } = row.original;
       const basePoints = position <= 10 ? positionPointsMapping[position - 1] : 0;
-      const bonusPoints = (pole ? 1 : 0) + (fastestLap ? 1 : 0);
+      const bonusPoints = (rules.poleGivesPoint && pole ? 1 : 0) + (rules.fastestLapGivesPoint && fastestLap ? 1 : 0);
       return basePoints + bonusPoints;
     },
     enableSorting: false,
@@ -107,6 +112,7 @@ interface DataTableProps {
   updateDriver: (position: number, newDriverId: string) => void;
   togglePole: (position: number) => void;
   toggleFastestLap: (position: number) => void;
+  rules: Rules;
 }
 
 export default function DataTable({
@@ -115,6 +121,7 @@ export default function DataTable({
   updateDriver,
   togglePole,
   toggleFastestLap,
+  rules,
 }: DataTableProps) {
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
@@ -124,7 +131,7 @@ export default function DataTable({
 
   const table = useReactTable({
     data: initialData,
-    columns,
+    columns: columns(rules),
     state: {
       sorting,
       columnVisibility,
