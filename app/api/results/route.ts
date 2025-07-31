@@ -1,22 +1,28 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
 
-const positionPointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+const sprintPointsMapping = [8, 7, 6, 5, 4, 3, 2, 1];
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const track = searchParams.get("track");
+  
   if (!track) {
     return NextResponse.json({ error: "No track specified" }, { status: 400 });
   }
+  
   const { data: results, error } = await supabase.from("results").select("*").eq("track", track);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(results);
 }
 
 export async function POST(request: Request) {
-  const { track, results } = await request.json();
-  console.log("POST /api/results payload:", { track, results }); // Debug log
+  const { track, trackType, results } = await request.json();
+  console.log("POST /api/results payload:", { track, trackType, results }); // Debug log
+
+  const eventType = trackType || 'Race';
+  console.log("Event type:", eventType); // Debug log
 
   // Clear existing results for the track
   const { error: deleteError } = await supabase.from("results").delete().eq("track", track);
@@ -39,7 +45,12 @@ export async function POST(request: Request) {
   // Update driver points (fetching current points from DB)
   for (const row of results) {
     if (!row.driverId) continue;
-    const basePoints = row.position <= 10 ? positionPointsMapping[row.position - 1] : 0;
+    
+    // Choose point system based on track type
+    const pointsMapping = eventType === 'Sprint' ? sprintPointsMapping : racePointsMapping;
+    const maxPositions = eventType === 'Sprint' ? 8 : 10;
+    
+    const basePoints = row.position <= maxPositions ? pointsMapping[row.position - 1] : 0;
     const bonusPoints = (rules.polegivespoint && row.pole ? 1 : 0) + (rules.fastestlapgivespoint && row.fastestLap ? 1 : 0);
     const totalPoints = basePoints + bonusPoints;
     // Save the race result

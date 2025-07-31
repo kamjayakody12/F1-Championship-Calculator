@@ -25,7 +25,6 @@ import {
   SidebarMenuButton,
 } from "@/components/ui/sidebar"
 
-// ─── REPLACE THIS `data.navMain` WITH YOUR ADMIN ROUTES ───────────────────────
 const data = {
   user: {
     name: "Admin",

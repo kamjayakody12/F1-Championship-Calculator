@@ -13,6 +13,21 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import type { Rules } from "@/models/Rules";
+import { Check, ChevronsUpDown } from "lucide-react";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 
 interface ResultRow {
@@ -22,12 +37,15 @@ interface ResultRow {
   fastestLap: boolean;
 }
 
-const positionPointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+const sprintPointsMapping = [8, 7, 6, 5, 4, 3, 2, 1];
 
 export default function AdminDashboardPage() {
   const [drivers, setDrivers] = useState<any[]>([]);
-  const [tracks, setTracks] = useState<{ id: string; name: string }[]>([]);
+  const [tracks, setTracks] = useState<{ id: string; name: string; type: string }[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<string>("");
+  const [selectedTrackType, setSelectedTrackType] = useState<string>("");
+  const [selectedTrackValue, setSelectedTrackValue] = useState<string>("");
   const [results, setResults] = useState<ResultRow[]>([]);
   const [rules, setRules] = useState<Rules | null>(null);
 
@@ -35,8 +53,8 @@ export default function AdminDashboardPage() {
     fetch("/api/drivers").then((r) => r.json()).then(setDrivers);
     fetch("/api/selected-tracks")
       .then((r) => r.json())
-      .then((arr: { track: { id: string; name: string } }[]) =>
-        setTracks(arr.map((s) => s.track))
+      .then((arr: { track: { id: string; name: string }; type: string }[]) =>
+        setTracks(arr.map((s) => ({ ...s.track, type: s.type })))
       );
   }, []);
 
@@ -58,8 +76,13 @@ export default function AdminDashboardPage() {
     );
   }, [drivers]);
 
-  function handleTrackChange(trackId: string) {
+  function handleTrackChange(trackIdAndType: string) {
+    const [trackId, trackType] = trackIdAndType.split('|');
+    
     setSelectedTrack(trackId);
+    setSelectedTrackType(trackType || "");
+    setSelectedTrackValue(trackIdAndType);
+    
     if (!trackId) return;
     fetch(`/api/results?track=${encodeURIComponent(trackId)}`)
       .then((r) => r.json())
@@ -116,14 +139,23 @@ export default function AdminDashboardPage() {
     await fetch("/api/results", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ track: selectedTrack, results }),
+      body: JSON.stringify({ 
+        track: selectedTrack, 
+        trackType: selectedTrackType,
+        results 
+      }),
     });
     toast.success("Results saved!");
   }
 
   function computePoints(r: ResultRow) {
     if (!rules) return 0;
-    const base = r.position <= 10 ? positionPointsMapping[r.position - 1] : 0;
+    
+    // Choose point system based on track type
+    const pointsMapping = selectedTrackType === 'Sprint' ? sprintPointsMapping : racePointsMapping;
+    const maxPositions = selectedTrackType === 'Sprint' ? 8 : 10;
+    
+    const base = r.position <= maxPositions ? pointsMapping[r.position - 1] : 0;
     const bonus =
       (rules.poleGivesPoint && r.pole ? 1 : 0) +
       (rules.fastestLapGivesPoint && r.fastestLap ? 1 : 0);
@@ -152,14 +184,14 @@ export default function AdminDashboardPage() {
         <label className="block mb-2 font-medium text-gray-700 dark:text-gray-300">
           Select Track
         </label>
-        <Select value={selectedTrack} onValueChange={handleTrackChange}>
+        <Select value={selectedTrackValue} onValueChange={handleTrackChange}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="-- Select a Track --" />
           </SelectTrigger>
           <SelectContent>
             {tracks.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.name}
+              <SelectItem key={`${t.id}-${t.type}`} value={`${t.id}|${t.type}`}>
+                {t.name} ({t.type})
               </SelectItem>
             ))}
           </SelectContent>
@@ -168,6 +200,23 @@ export default function AdminDashboardPage() {
 
       {selectedTrack && rules && (
         <>
+          {selectedTrackType && (
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                Event Type: <span className="font-bold">{selectedTrackType}</span>
+                {selectedTrackType === 'Sprint' && (
+                  <span className="ml-2 text-xs text-blue-600 dark:text-blue-300">
+                    (Points: 8-7-6-5-4-3-2-1 for top 8 positions)
+                  </span>
+                )}
+                {selectedTrackType === 'Race' && (
+                  <span className="ml-2 text-xs text-blue-600 dark:text-blue-300">
+                    (Points: 25-18-15-12-10-8-6-4-2-1 for top 10 positions)
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
           <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
             <table className="min-w-full table-auto divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-800">
