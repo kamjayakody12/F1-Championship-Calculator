@@ -3,7 +3,6 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -23,21 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { TrackTypeEnum } from "@/models/SelectedTrack";
-import { Check, ChevronsUpDown } from "lucide-react";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 
 export interface Track {
   id: string;
@@ -54,29 +39,55 @@ export default function ManageTracksPage() {
   const [selectedTracks, setSelectedTracks] = useState<SelectedTrack[]>([]);
   const [allTracks, setAllTracks] = useState<Track[]>([]);
 
-  // New track form state
+  const [isLoadingInitialData, setIsLoadingInitialData] = useState(true);
+  const [isAddingTrack, setIsAddingTrack] = useState(false);
+
   const [selectedTrackId, setSelectedTrackId] = useState("");
   const [trackType, setTrackType] = useState<TrackTypeEnum>(TrackTypeEnum.Race);
-  const [open, setOpen] = useState(false);
+  const [isAddTrackDialogOpen, setIsAddTrackDialogOpen] = useState(false);
 
-  // Fetch data on mount
   useEffect(() => {
-    fetch("/api/tracks").then((r) => r.json()).then(setAllTracks);
-    fetch("/api/selected-tracks").then((r) => r.json()).then(setSelectedTracks);
-  }, []);
+    async function fetchData() {
+      setIsLoadingInitialData(true);
+      try {
+        const [tracksResponse, selectedTracksResponse] = await Promise.all([
+          fetch("/api/tracks"),
+          fetch("/api/selected-tracks"),
+        ]);
 
-  // Get all tracks for selection (allow duplicates)
+        if (tracksResponse.ok) {
+          const tracksData = await tracksResponse.json();
+          setAllTracks(tracksData);
+        } else {
+          toast.error("Failed to fetch available tracks.");
+        }
+
+        if (selectedTracksResponse.ok) {
+          const selectedTracksData = await selectedTracksResponse.json();
+          setSelectedTracks(selectedTracksData);
+        } else {
+          toast.error("Failed to fetch current season tracks.");
+        }
+      } catch (error: any) {
+        toast.error("Error fetching data: " + error.message);
+      } finally {
+        setIsLoadingInitialData(false);
+      }
+    }
+    fetchData();
+  }, []);
+  console.log('isLoadingInitialData', isLoadingInitialData);
   const availableTracks = allTracks;
 
-  // --- ADD SELECTED TRACK ---
   async function addSelectedTrack(e?: React.FormEvent) {
     e?.preventDefault();
-    
+
     if (!selectedTrackId) {
       toast.error("Please select a track.");
       return;
     }
 
+    setIsAddingTrack(true);
     try {
       const response = await fetch("/api/selected-tracks", {
         method: "POST",
@@ -91,36 +102,37 @@ export default function ManageTracksPage() {
         let errorMsg = "Unknown error";
         try {
           const errorData = await response.json();
-          errorMsg = errorData.error || errorMsg;
-        } catch (e) {}
+          errorMsg = errorData.error || response.statusText || errorMsg;
+        } catch (e) {
+          errorMsg = response.statusText || errorMsg;
+        }
         toast.error("Failed to add track: " + errorMsg);
         return;
       }
 
-      // Reset form
       setSelectedTrackId("");
       setTrackType(TrackTypeEnum.Race);
-      setOpen(false);
+      setIsAddTrackDialogOpen(false); // Close the main dialog
 
-      // Refresh data
       const data = await fetch("/api/selected-tracks").then((r) => r.json());
       setSelectedTracks(data);
-      
+
       toast.success("Track added successfully!");
-    } catch (error) {
-      toast.error("Failed to add track: " + error);
+    } catch (error: any) {
+      toast.error("Failed to add track: " + error.message);
+    } finally {
+      setIsAddingTrack(false);
     }
   }
 
-  // --- UPDATE TRACK TYPE ---
-  async function updateTrackType(trackId: string, newType: TrackTypeEnum) {
+  async function updateTrackType(selectedTrackIdToUpdate: string, newType: TrackTypeEnum) {
     try {
       const response = await fetch("/api/selected-tracks", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          trackId, 
-          type: newType 
+        body: JSON.stringify({
+          trackId: selectedTrackIdToUpdate,
+          type: newType,
         }),
       });
 
@@ -128,51 +140,51 @@ export default function ManageTracksPage() {
         let errorMsg = "Unknown error";
         try {
           const errorData = await response.json();
-          errorMsg = errorData.error || errorMsg;
-        } catch (e) {}
+          errorMsg = errorData.error || response.statusText || errorMsg;
+        } catch (e) {
+          errorMsg = response.statusText || errorMsg;
+        }
         toast.error("Failed to update track type: " + errorMsg);
         return;
       }
 
-      // Refresh data
       const data = await fetch("/api/selected-tracks").then((r) => r.json());
       setSelectedTracks(data);
-      
+
       toast.success("Track type updated successfully!");
-    } catch (error) {
-      toast.error("Failed to update track type: " + error);
+    } catch (error: any) {
+      toast.error("Failed to update track type: " + error.message);
     }
   }
 
-  // --- DELETE SELECTED TRACK ---
-  async function deleteSelectedTrack(trackId: string) {
+  async function deleteSelectedTrack(trackIdToDelete: string) {
     try {
       const response = await fetch("/api/selected-tracks", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackId }),
+        body: JSON.stringify({ trackId: trackIdToDelete }),
       });
 
       if (!response.ok) {
         let errorMsg = "Unknown error";
         try {
           const errorData = await response.json();
-          errorMsg = errorData.error || errorMsg;
-        } catch (e) {}
+          errorMsg = errorData.error || response.statusText || errorMsg;
+        } catch (e) {
+          errorMsg = response.statusText || errorMsg;
+        }
         toast.error("Failed to delete track: " + errorMsg);
         return;
       }
 
-      // Refresh data
       const data = await fetch("/api/selected-tracks").then((r) => r.json());
       setSelectedTracks(data);
-      
+
       toast.success("Track removed successfully!");
-    } catch (error) {
-      toast.error("Failed to delete track: " + error);
+    } catch (error: any) {
+      toast.error("Failed to delete track: " + error.message);
     }
   }
-
   return (
     <div className="p-6 space-y-6">
       {/* Header and Add-Track Dialog */}
@@ -181,11 +193,11 @@ export default function ManageTracksPage() {
           Manage Season Tracks
         </h1>
 
-        <Dialog onOpenChange={(isOpen) => !isOpen && setOpen(false)}>
-          <DialogTrigger asChild>
+        <Dialog onOpenChange={setIsAddTrackDialogOpen} open={isAddTrackDialogOpen}>
+          <DialogTrigger>
             <Button variant="default">Add Track</Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:min-w-[425px]">
             <DialogHeader>
               <DialogTitle>Add Track to Season</DialogTitle>
               <DialogDescription>
@@ -199,49 +211,28 @@ export default function ManageTracksPage() {
                   Track
                 </Label>
                 <div className="col-span-3">
-                  <Popover open={open} onOpenChange={setOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={open}
-                        className="w-full justify-between"
-                      >
-                        {selectedTrackId
-                          ? availableTracks.find((track) => track.id === selectedTrackId)?.name
-                          : "Select track..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0">
-                      <Command>
-                        <CommandInput placeholder="Search tracks..." className="h-9" />
-                        <CommandList>
-                          <CommandEmpty>No track found.</CommandEmpty>
-                          <CommandGroup>
-                            {availableTracks.map((track) => (
-                              <CommandItem
-                                key={track.id}
-                                value={track.name}
-                                onSelect={() => {
-                                  setSelectedTrackId(track.id);
-                                  setOpen(false);
-                                }}
-                              >
-                                {track.name}
-                                <Check
-                                  className={cn(
-                                    "ml-auto",
-                                    selectedTrackId === track.id ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                  <Select
+                    value={selectedTrackId}
+                    onValueChange={(value) => setSelectedTrackId(value)}
+                    disabled={isLoadingInitialData}
+                  >
+                    <SelectTrigger id="track-select">
+                      <SelectValue
+                        placeholder={
+                          isLoadingInitialData
+                            ? "Loading tracks..."
+                            : "Select a track"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableTracks.map((track) => (
+                        <SelectItem key={track.id} value={track.id}>
+                          {track.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -258,18 +249,20 @@ export default function ManageTracksPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={TrackTypeEnum.Race}>
-                      {TrackTypeEnum.Race}
-                    </SelectItem>
-                    <SelectItem value={TrackTypeEnum.Sprint}>
-                      {TrackTypeEnum.Sprint}
-                    </SelectItem>
+                    {Object.values(TrackTypeEnum).map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <DialogFooter>
-                <Button type="submit">Add Track</Button>
+                <Button type="submit" disabled={isAddingTrack || isLoadingInitialData || !selectedTrackId}>
+                  {isAddingTrack && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Add Track
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -292,45 +285,58 @@ export default function ManageTracksPage() {
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-600">
-            {selectedTracks.map((selectedTrack) => (
-              <tr
-                key={selectedTrack.id}
-                className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                  {selectedTrack.track.name}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <Select
-                    value={selectedTrack.type}
-                    onValueChange={(value) =>
-                      updateTrackType(selectedTrack.id, value as TrackTypeEnum)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={TrackTypeEnum.Race}>
-                        {TrackTypeEnum.Race}
-                      </SelectItem>
-                      <SelectItem value={TrackTypeEnum.Sprint}>
-                        {TrackTypeEnum.Sprint}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right">
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => deleteSelectedTrack(selectedTrack.id)}
-                  >
-                    Remove
-                  </Button>
+            {isLoadingInitialData ? (
+              <tr>
+                <td colSpan={3} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                  <Loader2 className="inline-block mr-2 h-4 w-4 animate-spin" /> Loading tracks...
                 </td>
               </tr>
-            ))}
+            ) : selectedTracks.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                  No tracks added to this season yet. Click "Add Track" to get started.
+                </td>
+              </tr>
+            ) : (
+              selectedTracks.map((selectedTrack) => (
+                <tr
+                  key={selectedTrack.id}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {selectedTrack.track?.name || 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <Select
+                      value={selectedTrack.type}
+                      onValueChange={(value) =>
+                        updateTrackType(selectedTrack.id, value as TrackTypeEnum)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.values(TrackTypeEnum).map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => deleteSelectedTrack(selectedTrack.id)}
+                    >
+                      Remove
+                    </Button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
