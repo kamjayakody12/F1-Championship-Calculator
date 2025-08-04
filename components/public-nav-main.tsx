@@ -42,10 +42,12 @@ export function NavMain({
             defaultOpen={item.isActive}
           >
             <SidebarMenuItem>
-                <SidebarMenuButton tooltip={item.title}>
+              <SidebarMenuButton tooltip={item.title} asChild>
+                <a href={item.url}>
                   {item.icon && <item.icon />}
                   <span>{item.title}</span>
-                </SidebarMenuButton>
+                </a>
+              </SidebarMenuButton>
               <CollapsibleContent>
                 <SidebarMenuSub>
                   {item.items?.map((subItem) => (

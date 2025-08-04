@@ -7,4 +7,5 @@ export interface Result {
   driver: string; // driver id (foreign key)
   pole: boolean;
   fastestlap: boolean;
+  racefinished: boolean;
 }

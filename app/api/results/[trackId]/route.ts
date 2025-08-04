@@ -4,31 +4,27 @@ import { supabase } from "@/lib/db";
 const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 const sprintPointsMapping = [8, 7, 6, 5, 4, 3, 2, 1];
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const track = searchParams.get("track");
+export async function PUT(
+  request: Request,
+  { params }: { params: { trackId: string } }
+) {
+  const { trackType, results } = await request.json();
+  const track = params.trackId;
   
-  if (!track) {
-    return NextResponse.json({ error: "No track specified" }, { status: 400 });
-  }
-  
-  const { data: results, error } = await supabase.from("results").select("*").eq("track", track);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(results);
-}
-
-export async function POST(request: Request) {
-  const { track, trackType, results } = await request.json();
-  console.log("POST /api/results payload:", { track, trackType, results }); // Debug log
+  console.log("PUT /api/results/[trackId] payload:", { track, trackType, results }); // Debug log
 
   const eventType = trackType || 'Race';
   console.log("Event type:", eventType); // Debug log
 
-  // Clear existing results for the track
-  const { error: deleteError } = await supabase.from("results").delete().eq("track", track);
-  if (deleteError) {
-    console.error("Error deleting old results:", deleteError);
-    return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  // First, we need to revert the points from the existing results
+  const { data: existingResults, error: fetchError } = await supabase
+    .from("results")
+    .select("*")
+    .eq("track", track);
+  
+  if (fetchError) {
+    console.error("Error fetching existing results:", fetchError);
+    return NextResponse.json({ error: fetchError.message }, { status: 500 });
   }
 
   // Fetch rules for bonus points
@@ -42,7 +38,52 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: rulesError.message }, { status: 500 });
   }
 
-  // Update driver points (fetching current points from DB)
+  // Revert points from existing results
+  for (const existingResult of existingResults || []) {
+    if (!existingResult.driver) continue;
+    
+    // Calculate points that were previously awarded
+    const pointsMapping = eventType === 'Sprint' ? sprintPointsMapping : racePointsMapping;
+    const maxPositions = eventType === 'Sprint' ? 8 : 10;
+    
+    const basePoints = existingResult.position <= maxPositions ? pointsMapping[existingResult.position - 1] : 0;
+    const bonusPoints = (rules.polegivespoint && existingResult.pole ? 1 : 0) + (rules.fastestlapgivespoint && existingResult.fastestlap ? 1 : 0);
+    const totalPoints = basePoints + bonusPoints;
+    
+    // Subtract these points from the driver
+    const { data: driverData, error: driverFetchError } = await supabase
+      .from("drivers")
+      .select("points")
+      .eq("id", existingResult.driver)
+      .single();
+    
+    if (driverFetchError) {
+      console.error("Error fetching driver points for revert:", driverFetchError);
+      return NextResponse.json({ error: driverFetchError.message }, { status: 500 });
+    }
+    
+    const currentPoints = driverData?.points || 0;
+    const { error: revertError } = await supabase
+      .from("drivers")
+      .update({ points: Math.max(0, currentPoints - totalPoints) })
+      .eq("id", existingResult.driver);
+    
+    if (revertError) {
+      console.error("Error reverting driver points:", revertError);
+      return NextResponse.json({ error: revertError.message }, { status: 500 });
+    }
+    
+    console.log(`Reverted ${totalPoints} points from driver ${existingResult.driver}`);
+  }
+
+  // Clear existing results for the track
+  const { error: deleteError } = await supabase.from("results").delete().eq("track", track);
+  if (deleteError) {
+    console.error("Error deleting old results:", deleteError);
+    return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  }
+
+  // Now insert the new results
   for (const row of results) {
     if (!row.driverId) continue;
     
@@ -63,7 +104,7 @@ export async function POST(request: Request) {
         console.error("Error inserting result:", insertError);
         return NextResponse.json({ error: insertError.message }, { status: 500 });
       }
-      console.log(`Inserted result for driver ${row.driverId} (DNF - 0 points)`);
+      console.log(`Updated result for driver ${row.driverId} (DNF - 0 points)`);
       continue; // Skip point calculation for DNF drivers
     }
     
@@ -74,6 +115,7 @@ export async function POST(request: Request) {
     const basePoints = row.position <= maxPositions ? pointsMapping[row.position - 1] : 0;
     const bonusPoints = (rules.polegivespoint && row.pole ? 1 : 0) + (rules.fastestlapgivespoint && row.fastestLap ? 1 : 0);
     const totalPoints = basePoints + bonusPoints;
+    
     // Save the race result
     const { error: insertError } = await supabase.from("results").insert([
       {
@@ -89,6 +131,7 @@ export async function POST(request: Request) {
       console.error("Error inserting result:", insertError);
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
+    
     // Fetch current driver points from DB
     const { data: driverData, error: fetchError } = await supabase
       .from("drivers")
@@ -100,6 +143,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: fetchError.message }, { status: 500 });
     }
     const currentPoints = driverData?.points || 0;
+    
     // Update the driver's total championship points
     const { error: updateError } = await supabase
       .from("drivers")
@@ -109,7 +153,7 @@ export async function POST(request: Request) {
       console.error("Error updating driver points:", updateError);
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
-    console.log(`Inserted result for driver ${row.driverId}, updated points to ${currentPoints + totalPoints}`);
+    console.log(`Updated result for driver ${row.driverId}, updated points to ${currentPoints + totalPoints}`);
   }
 
   // Constructors calculation
@@ -143,6 +187,4 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ success: true });
-}
-
-
+} 
