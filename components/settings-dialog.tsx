@@ -1,21 +1,24 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
+import { Button } from "@/components/ui/button";
 import {
-  Bell,
-  Check,
-  Globe,
-  Home,
-  Keyboard,
-  Link,
-  Lock,
-  Menu,
-  MessageCircle,
-  Paintbrush,
-  Settings,
-  Video,
-} from "lucide-react"
-
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -23,38 +26,34 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
-import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/breadcrumb";
 import { Toggle } from "@/components/ui/toggle";
+import { toast } from "sonner";
 
 const data = {
   nav: [
-    { name: "Home", icon: Home },
-    { name: "Appearance", icon: Paintbrush },
-    { name: "Rules", icon: Globe },
-    { name: "Accessibility", icon: Keyboard },
-    { name: "Audio & video", icon: Video },
-    { name: "Privacy & visibility", icon: Lock },
-    { name: "Advanced", icon: Settings },
+    {
+      name: "Rules",
+      icon: () => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="lucide lucide-settings"
+        >
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      ),
+    },
   ],
-}
+};
 
 export function SettingsDialog() {
   const [open, setOpen] = React.useState(true);
@@ -62,7 +61,6 @@ export function SettingsDialog() {
   const [fastestLapGivesPoint, setFastestLapGivesPoint] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setLoading(true);
@@ -73,19 +71,23 @@ export function SettingsDialog() {
         setFastestLapGivesPoint(!!data.fastestlapgivespoint);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setLoading(false);
+        toast.error("Failed to load rules");
+      });
   }, []);
 
   const handleSave = async () => {
     setSaving(true);
-    setError(null);
     const res = await fetch("/api/rules", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ polegivespoint: poleGivesPoint, fastestlapgivespoint: fastestLapGivesPoint }),
     });
     if (!res.ok) {
-      setError("Failed to save settings");
+      toast.error("Failed to save rules");
+    } else {
+      toast.success("Rules saved successfully!");
     }
     setSaving(false);
   };
@@ -165,10 +167,9 @@ export function SettingsDialog() {
                       />
                       Award extra point for fastest lap
                     </label>
-                    <Button onClick={handleSave} disabled={saving} className="mt-4">
-                      {saving ? "Saving..." : "Save"}
+                    <Button onClick={handleSave} disabled={saving}>
+                      {saving ? "Saving..." : "Save Settings"}
                     </Button>
-                    {error && <span className="text-red-500">{error}</span>}
                   </>
                 )}
               </div>

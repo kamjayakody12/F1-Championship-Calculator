@@ -5,6 +5,9 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/public-sidebar";
 import { SiteHeader } from "@/components/public-site-header";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
+import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
+import { ShortcutHint } from "@/components/shortcut-hint";
 
 export default function AdminLayout({
   children,
@@ -27,7 +30,9 @@ export default function AdminLayout({
         {/* the rest of the page */}
         <SidebarInset>
           <SiteHeader />
-
+          <Toaster position="top-center" />
+          <KeyboardShortcuts />
+          <ShortcutHint />
           <main >{children}</main>
         </SidebarInset>
       </SidebarProvider>

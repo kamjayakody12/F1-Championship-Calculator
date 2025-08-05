@@ -1,38 +1,51 @@
 // app/admin/teams/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
-  DialogTrigger,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
+
+interface Team {
+  id: string;
+  name: string;
+}
 
 export default function AdminTeamsPage() {
-  const [teams, setTeams] = useState<any[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [teamName, setTeamName] = useState("");
 
-  // 1️⃣ Fetch teams
   async function fetchTeams() {
     const res = await fetch("/api/teams");
-    const data = await res.json();
-    setTeams(data);
+    if (res.ok) {
+      const data = await res.json();
+      setTeams(data);
+    } else {
+      toast.error("Failed to fetch teams");
+    }
   }
 
   useEffect(() => {
     fetchTeams();
   }, []);
 
-  // 2️⃣ Add team
   async function addTeam(e?: React.FormEvent) {
     e?.preventDefault();
+    if (!teamName.trim()) {
+      toast.error("Please enter a team name");
+      return;
+    }
+
     const res = await fetch("/api/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -41,10 +54,19 @@ export default function AdminTeamsPage() {
     if (res.ok) {
       setTeamName("");
       fetchTeams();
+      toast.success("Team added successfully!");
+    } else {
+      let errorMsg = "Unknown error";
+      try {
+        const errorData = await res.json();
+        errorMsg = errorData.error || errorMsg;
+      } catch (e) {
+        // ignore JSON parse error
+      }
+      toast.error("Failed to add team: " + errorMsg);
     }
   }
 
-  // 3️⃣ Delete team
   async function deleteTeam(teamId: string) {
     console.log("Attempting to delete team with id:", teamId); // Debug log
     const res = await fetch("/api/teams", {
@@ -54,6 +76,7 @@ export default function AdminTeamsPage() {
     });
     if (res.ok) {
       fetchTeams();
+      toast.success("Team deleted successfully!");
     } else {
       let errorMsg = "Unknown error";
       try {
@@ -62,7 +85,7 @@ export default function AdminTeamsPage() {
       } catch (e) {
         // ignore JSON parse error
       }
-      alert("Failed to delete team: " + errorMsg);
+      toast.error("Failed to delete team: " + errorMsg);
     }
   }
 

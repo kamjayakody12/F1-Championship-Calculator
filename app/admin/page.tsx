@@ -167,7 +167,10 @@ export default function AdminDashboardPage() {
   }
 
   async function submitResults() {
-    if (!selectedTrackId) return alert("Please select a track");
+    if (!selectedTrackId) {
+      toast.error("Please select a track");
+      return;
+    }
     if (results.some((r) => !r.driverId))
       return toast.error("Select a driver for every position");
     

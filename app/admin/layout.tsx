@@ -7,8 +7,8 @@ import { AppSidebar } from "@/components/admin-sidebar";
 import { SiteHeader } from "@/components/admin-site-header";
 // ← import your ThemeProvider
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/sonner"
-
+import { Toaster } from "@/components/ui/sonner";
+import { AuthGuard } from "@/components/auth-guard";
 
 export default function AdminLayout({
   children,
@@ -16,25 +16,27 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    // wrap everything in the ThemeProvider
-    <ThemeProvider attribute="class" defaultTheme="system">
-      {/* Provide the sidebar context (offcanvas on mobile, fixed on desktop) */}
-      <SidebarProvider
-        style={{
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 12)",
-        } as React.CSSProperties}
-      >
-        {/* your off-canvas/fixed sidebar */}
-        <AppSidebar variant="inset" />
+    <AuthGuard>
+      {/* wrap everything in the ThemeProvider */}
+      <ThemeProvider attribute="class" defaultTheme="system">
+        {/* Provide the sidebar context (offcanvas on mobile, fixed on desktop) */}
+        <SidebarProvider
+          style={{
+            "--sidebar-width": "calc(var(--spacing) * 72)",
+            "--header-height": "calc(var(--spacing) * 12)",
+          } as React.CSSProperties}
+        >
+          {/* your off-canvas/fixed sidebar */}
+          <AppSidebar variant="inset" />
 
-        {/* the rest of the page */}
-        <SidebarInset className="flex flex-col min-h-screen">
-          <SiteHeader />
-          <Toaster position="top-center" />
-          <main className="flex-1 p-6 overflow-auto">{children}</main>
-        </SidebarInset>
-      </SidebarProvider>
-    </ThemeProvider>
+          {/* the rest of the page */}
+          <SidebarInset className="flex flex-col min-h-screen">
+            <SiteHeader />
+            <Toaster position="top-center" />
+            <main className="flex-1 p-6 overflow-auto">{children}</main>
+          </SidebarInset>
+        </SidebarProvider>
+      </ThemeProvider>
+    </AuthGuard>
   );
 }

@@ -1,78 +1,79 @@
 // app/admin/drivers/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
-  DialogTrigger,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 
-// Magic constant for “no team” so our SelectItem value is never empty
-const NO_TEAM = "none";
+const NO_TEAM = "no-team";
 
 export default function AdminDriversPage() {
   const [drivers, setDrivers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
-
-  // New driver form state
   const [driverName, setDriverName] = useState("");
   const [driverTeamId, setDriverTeamId] = useState("");
 
-  // Fetch drivers & teams on mount
   useEffect(() => {
-    fetch("/api/drivers").then((r) => r.json()).then(setDrivers);
-    fetch("/api/teams").then((r) => r.json()).then(setTeams);
+    fetchDrivers();
+    fetchTeams();
   }, []);
 
-  // Helpers for controlling team assignments
-  function getAvailableTeamsForDriver(driver: any) {
-    return teams.filter((team) => {
-      if (!team || !team.id) return false;
-      const assignedCount = drivers.filter(
-        (d) =>
-          d.id !== driver.id &&
-          ((d.team && d.team.id && d.team.id.toString() === team.id.toString()) ||
-           d.team === team.id)
-      ).length;
-      const isCurrent =
-        (driver.team && driver.team.id && driver.team.id.toString() === team.id.toString()) ||
-        driver.team === team.id;
-      return isCurrent || assignedCount < 2;
-    });
+  async function fetchDrivers() {
+    const res = await fetch("/api/drivers");
+    if (res.ok) {
+      const data = await res.json();
+      setDrivers(data);
+    } else {
+      toast.error("Failed to fetch drivers");
+    }
   }
-  const availableTeamsForNewDriver = teams.filter((team) => {
-    if (!team || !team.id) return false;
-    const count = drivers.filter(
-      (d) =>
-        (d.team && d.team.id && d.team.id.toString() === team.id.toString()) ||
-        d.team === team.id
-    ).length;
-    return count < 2;
-  });
 
-  // --- 1) ADD DRIVER ---
+  async function fetchTeams() {
+    const res = await fetch("/api/teams");
+    if (res.ok) {
+      const data = await res.json();
+      setTeams(data);
+    } else {
+      toast.error("Failed to fetch teams");
+    }
+  }
+
+  function getAvailableTeamsForDriver(driver: any) {
+    const currentTeamId = driver.team?.id?.toString() ?? (typeof driver.team === "string" ? driver.team : NO_TEAM);
+    return teams.filter((team) => team.id.toString() !== currentTeamId);
+  }
+
+  const availableTeamsForNewDriver = teams;
+
   async function addDriver(e?: React.FormEvent) {
     e?.preventDefault();
+    if (!driverName.trim()) {
+      toast.error("Please enter a driver name");
+      return;
+    }
     if (!driverTeamId) {
       toast.error("Please select a team.");
       return;
     }
+
     const res = await fetch("/api/drivers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -81,53 +82,12 @@ export default function AdminDriversPage() {
         teamId: driverTeamId,
       }),
     });
-    if (!res.ok) {
-      let errorMsg = "Unknown error";
-      try {
-        const errorData = await res.json();
-        errorMsg = errorData.error || errorMsg;
-      } catch (e) {}
-      toast.error("Failed to add driver: " + errorMsg);
-      return;
-    }
-    setDriverName("");
-    setDriverTeamId("");
-    const data = await fetch("/api/drivers").then((r) => r.json());
-    setDrivers(data);
-  }
 
-  // --- 2) EDIT DRIVER’S TEAM ---
-  async function updateDriverTeam(driverId: string, newTeamId: string) {
-    const teamId = newTeamId === NO_TEAM ? null : newTeamId;
-    const res = await fetch("/api/drivers", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ driverId, teamId }),
-    });
-    if (!res.ok) {
-      let errorMsg = "Unknown error";
-      try {
-        const errorData = await res.json();
-        errorMsg = errorData.error || errorMsg;
-      } catch (e) {}
-      toast.error("Failed to update driver: " + errorMsg);
-      return;
-    }
-    const data = await fetch("/api/drivers").then((r) => r.json());
-    setDrivers(data);
-  }
-
-  // --- 3) DELETE DRIVER ---
-  async function deleteDriver(driverId: string) {
-    console.log("Attempting to delete driver with id:", driverId); // Debug log
-    const res = await fetch("/api/drivers", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ driverId }),
-    });
     if (res.ok) {
-      const data = await fetch("/api/drivers").then((r) => r.json());
-      setDrivers(data);
+      setDriverName("");
+      setDriverTeamId("");
+      fetchDrivers();
+      toast.success("Driver added successfully!");
     } else {
       let errorMsg = "Unknown error";
       try {
@@ -136,7 +96,54 @@ export default function AdminDriversPage() {
       } catch (e) {
         // ignore JSON parse error
       }
-      alert("Failed to delete driver: " + errorMsg);
+      toast.error("Failed to add driver: " + errorMsg);
+    }
+  }
+
+  async function updateDriverTeam(driverId: string, newTeamId: string) {
+    const res = await fetch("/api/drivers", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        driverId,
+        teamId: newTeamId,
+      }),
+    });
+
+    if (res.ok) {
+      fetchDrivers();
+      toast.success("Driver team updated successfully!");
+    } else {
+      let errorMsg = "Unknown error";
+      try {
+        const errorData = await res.json();
+        errorMsg = errorData.error || errorMsg;
+      } catch (e) {
+        // ignore JSON parse error
+      }
+      toast.error("Failed to update driver: " + errorMsg);
+    }
+  }
+
+  async function deleteDriver(driverId: string) {
+    const res = await fetch("/api/drivers", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ driverId }),
+    });
+
+    if (res.ok) {
+      fetchDrivers();
+      toast.success("Driver deleted successfully!");
+    } else {
+      let errorMsg = "Unknown error";
+      try {
+        const errorData = await res.json();
+        errorMsg = errorData.error || errorMsg;
+      } catch (e) {
+        // ignore JSON parse error
+      }
+      toast.error("Failed to delete driver: " + errorMsg);
     }
   }
 
@@ -227,7 +234,7 @@ export default function AdminDriversPage() {
               const currentTeamId =
                 driver.team?.id?.toString() ??
                 (typeof driver.team === "string" ? driver.team : NO_TEAM);
-              const driverAvailableTeams = getAvailableTeamsForDriver(driver);
+              const availableTeams = getAvailableTeamsForDriver(driver);
 
               return (
                 <tr
@@ -238,29 +245,29 @@ export default function AdminDriversPage() {
                     {driver.name}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {driver.points}
+                    {driver.points || 0}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     <Select
                       value={currentTeamId}
-                      onValueChange={(val) =>
-                        updateDriverTeam(driver.id, val)
+                      onValueChange={(newTeamId) =>
+                        updateDriverTeam(driver.id, newTeamId)
                       }
                     >
-                      <SelectTrigger size="sm">
-                        <SelectValue placeholder="No Team" />
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={NO_TEAM} key={NO_TEAM}>No Team</SelectItem>
-                        {driverAvailableTeams.map((team: any) => (
-                          <SelectItem key={team.id} value={team.id}>
+                        <SelectItem value={NO_TEAM}>No Team</SelectItem>
+                        {availableTeams.map((team) => (
+                          <SelectItem key={team.id} value={team.id.toString()}>
                             {team.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <Button
                       variant="destructive"
                       size="sm"
