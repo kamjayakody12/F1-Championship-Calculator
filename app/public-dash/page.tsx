@@ -11,11 +11,18 @@ import {
 } from "@/components/ui/table";
 import { ArrowUp, ArrowDown } from "lucide-react";
 
+// Helper function to extract image URL from HTML string
+function extractImageUrl(htmlString: string): string {
+  if (!htmlString) return '';
+  const match = htmlString.match(/src="([^"]+)"/);
+  return match ? match[1] : '';
+}
+
 export default async function HomePage() {
   // Fetch drivers and teams from Supabase
   const { data: drivers, error: driversError } = await supabase
     .from('drivers')
-    .select('*, teams(name)');
+    .select('*, teams(name, logo)');
   const { data: teamsData, error: teamsError } = await supabase
     .from('teams')
     .select('*');
@@ -84,8 +91,16 @@ export default async function HomePage() {
                     <TableRow key={driver.id} className="border-b border-gray-100 dark:border-border last:border-0 hover:bg-gray-50 dark:hover:bg-muted/30 transition">
                       <TableCell className="py-3 px-4 font-semibold text-gray-700 dark:text-gray-100">{idx + 1}</TableCell>
                       <TableCell className="py-3 px-4 flex items-center gap-3">
-                        {/* Placeholder for driver logo */}
-                        <span className="inline-block w-7 h-7 bg-gray-200 dark:bg-muted rounded-full flex-shrink-0" />
+                        {/* Team logo for driver */}
+                        {extractImageUrl(driver.teams?.logo || '') ? (
+                          <img 
+                            src={extractImageUrl(driver.teams.logo)} 
+                            alt={`${driver.teams?.name || 'Team'} logo`} 
+                            className="w-7 h-7 object-contain flex-shrink-0" 
+                          />
+                        ) : (
+                          <span className="inline-block w-7 h-7 bg-gray-200 dark:bg-muted rounded-full flex-shrink-0" />
+                        )}
                         <span className="font-medium text-gray-900 dark:text-gray-100">{driver.name}</span>
                       </TableCell>
                       <TableCell className="py-3 px-4 font-bold text-gray-900 dark:text-gray-100">{driver.points}</TableCell>
@@ -126,8 +141,16 @@ export default async function HomePage() {
                     <TableRow key={team.id} className="border-b border-gray-100 dark:border-border last:border-0 hover:bg-gray-50 dark:hover:bg-muted/30 transition">
                       <TableCell className="py-3 px-4 font-semibold text-gray-700 dark:text-gray-100">{idx + 1}</TableCell>
                       <TableCell className="py-3 px-4 flex items-center gap-3">
-                        {/* Placeholder for team logo */}
-                        <span className="inline-block w-7 h-7 bg-gray-200 dark:bg-muted rounded-full flex-shrink-0" />
+                        {/* Team logo */}
+                        {extractImageUrl(team.logo || '') ? (
+                          <img 
+                            src={extractImageUrl(team.logo)} 
+                            alt={`${team.name} logo`} 
+                            className="w-7 h-7 object-contain flex-shrink-0" 
+                          />
+                        ) : (
+                          <span className="inline-block w-7 h-7 bg-gray-200 dark:bg-muted rounded-full flex-shrink-0" />
+                        )}
                         <span className="font-medium text-gray-900 dark:text-gray-100">{team.name}</span>
                       </TableCell>
                       <TableCell className="py-3 px-4 font-bold text-gray-900 dark:text-gray-100">{team.constructorPoints}</TableCell>

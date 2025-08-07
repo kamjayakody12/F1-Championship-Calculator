@@ -13,6 +13,7 @@ import {
   IconClock,
   IconTrack,
   IconUsersGroup,
+  IconPhoto,
 } from "@tabler/icons-react"
 import { NavUser } from "@/components/admin-nav-user"
 import {

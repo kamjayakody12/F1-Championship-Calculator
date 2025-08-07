@@ -1,7 +1,8 @@
 // models/Team.ts
 
 export interface Team {
-  id: string; // UUID or serial, depending on Supabase schema
+  id: string;
   name: string;
   points: number;
+  logo: string;
 }

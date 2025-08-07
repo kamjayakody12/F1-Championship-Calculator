@@ -46,6 +46,9 @@ export async function POST(request: Request) {
   for (const row of results) {
     if (!row.driverId) continue;
     
+    // TODO: Add team column to results table in Supabase
+    // For now, we'll skip the team field until the database schema is updated
+    
     // If driver didn't finish the race, they get zero points
     if (!row.racefinished) {
       // Save the race result with 0 points
@@ -54,6 +57,7 @@ export async function POST(request: Request) {
           track,
           position: row.position,
           driver: row.driverId,
+          // team: driverTeamData.team, // TODO: Add team column to results table
           pole: row.pole,
           fastestlap: row.fastestLap, // use lowercase column name
           racefinished: row.racefinished
@@ -80,6 +84,7 @@ export async function POST(request: Request) {
         track,
         position: row.position,
         driver: row.driverId,
+                  // team: driverTeamData.team, // TODO: Add team column to results table
         pole: row.pole,
         fastestlap: row.fastestLap, // use lowercase column name
         racefinished: row.racefinished
@@ -90,7 +95,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
     // Fetch current driver points from DB
-    const { data: driverData, error: fetchError } = await supabase
+    const { data: driverPointsData, error: fetchError } = await supabase
       .from("drivers")
       .select("points")
       .eq("id", row.driverId)
@@ -99,7 +104,7 @@ export async function POST(request: Request) {
       console.error("Error fetching driver points:", fetchError);
       return NextResponse.json({ error: fetchError.message }, { status: 500 });
     }
-    const currentPoints = driverData?.points || 0;
+    const currentPoints = driverPointsData?.points || 0;
     // Update the driver's total championship points
     const { error: updateError } = await supabase
       .from("drivers")

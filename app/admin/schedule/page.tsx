@@ -15,8 +15,9 @@ import { toast } from "sonner";
 
 
 interface TrackRow {
-  trackId: string;
-  name: string;
+  selectedTrackId: string;
+  trackName: string;
+  type: string;
   date: string; // "YYYY-MM-DD" or ""
 }
 
@@ -25,32 +26,45 @@ export default function ManageSchedulesPage() {
 
   useEffect(() => {
     async function load() {
-      // load only the tracks you’ve marked “selected”
-      const selRes = await fetch("/api/selected-tracks");
-      const selected: { track: { id: string; name: string } }[] =
-        await selRes.json();
+      try {
+        // load only the tracks you've marked "selected"
+        const selRes = await fetch("/api/selected-tracks");
+        const selected: { id: string; track: { name: string }; type: string }[] =
+          await selRes.json();
 
-      // load any existing schedules for those tracks
-      const schedRes = await fetch("/api/schedules");
-      const schedules: { trackId: string; date: string }[] =
-        await schedRes.json();
-      const dateMap = new Map(schedules.map((s) => [s.trackId, s.date]));
+        // load any existing schedules for those tracks
+        const schedRes = await fetch("/api/schedules");
+        const schedulesResponse = await schedRes.json();
+        
+                 // Ensure schedules is an array
+         const schedules: { track: string; date: string }[] = 
+           Array.isArray(schedulesResponse) ? schedulesResponse : [];
+        
+        console.log('Schedules response:', schedulesResponse);
+        console.log('Schedules array:', schedules);
+        
+                 const dateMap = new Map(schedules.map((s) => [s.track, s.date])); // Use s.track (which is selected_tracks.id)
 
-      // merge into our table rows
-      const rows: TrackRow[] = selected.map((s) => ({
-        trackId: s.track.id,
-        name: s.track.name,
-        date: dateMap.get(s.track.id) || "",
-      }));
+        // merge into our table rows
+        const rows: TrackRow[] = selected.map((s) => ({
+          selectedTrackId: s.id,
+          trackName: s.track.name,
+          type: s.type,
+          date: dateMap.get(s.id) || "",
+        }));
 
-      setTracks(rows);
+        setTracks(rows);
+      } catch (error) {
+        console.error('Error loading schedule data:', error);
+        toast.error('Failed to load schedule data');
+      }
     }
     load();
   }, []);
 
-  function handleDateChange(trackId: string, newIso: string) {
+  function handleDateChange(selectedTrackId: string, newIso: string) {
     setTracks((prev) =>
-      prev.map((t) => (t.trackId === trackId ? { ...t, date: newIso } : t))
+      prev.map((t) => (t.selectedTrackId === selectedTrackId ? { ...t, date: newIso } : t))
     );
   }
 
@@ -61,7 +75,7 @@ export default function ManageSchedulesPage() {
         fetch("/api/schedules", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ track: t.trackId, date: t.date }),
+          body: JSON.stringify({ selectedTrack: t.selectedTrackId, date: t.date }),
         })
       )
     );
@@ -82,6 +96,9 @@ export default function ManageSchedulesPage() {
                 Track
               </th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                Type
+              </th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                 Date
               </th>
             </tr>
@@ -89,11 +106,20 @@ export default function ManageSchedulesPage() {
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-600">
             {tracks.map((t) => (
               <tr
-                key={t.trackId}
+                key={t.selectedTrackId}
                 className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                  {t.name}
+                  {t.trackName}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                  <span className={`px-2 py-1 text-xs rounded-full ${
+                    t.type === 'Sprint' 
+                      ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200' 
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200'
+                  }`}>
+                    {t.type}
+                  </span>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   <Popover>
@@ -115,7 +141,7 @@ export default function ManageSchedulesPage() {
                         onSelect={(date) => {
                           if (date) {
                             const iso = format(date, "yyyy-MM-dd");
-                            handleDateChange(t.trackId, iso);
+                            handleDateChange(t.selectedTrackId, iso);
                           }
                         }}
                       />
