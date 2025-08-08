@@ -56,11 +56,6 @@ export default function AdminDriversPage() {
     }
   }
 
-  function getAvailableTeamsForDriver(driver: any) {
-    const currentTeamId = driver.team?.id?.toString() ?? (typeof driver.team === "string" ? driver.team : NO_TEAM);
-    return teams.filter((team) => team.id.toString() !== currentTeamId);
-  }
-
   const availableTeamsForNewDriver = teams;
 
   async function addDriver(e?: React.FormEvent) {
@@ -198,7 +193,7 @@ export default function AdminDriversPage() {
                   <SelectContent>
                     <SelectItem value={NO_TEAM} key={NO_TEAM}>Select Team</SelectItem>
                     {availableTeamsForNewDriver.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
+                      <SelectItem key={team.id} value={team.id.toString()}>
                         {team.name}
                       </SelectItem>
                     ))}
@@ -234,7 +229,6 @@ export default function AdminDriversPage() {
               const currentTeamId =
                 driver.team?.id?.toString() ??
                 (typeof driver.team === "string" ? driver.team : NO_TEAM);
-              const availableTeams = getAvailableTeamsForDriver(driver);
 
               return (
                 <tr
@@ -251,7 +245,10 @@ export default function AdminDriversPage() {
                     <Select
                       value={currentTeamId}
                       onValueChange={(newTeamId) =>
-                        updateDriverTeam(driver.id, newTeamId)
+                        updateDriverTeam(
+                          driver.id,
+                          newTeamId === NO_TEAM ? "" : newTeamId
+                        )
                       }
                     >
                       <SelectTrigger className="w-[180px]">
@@ -259,7 +256,7 @@ export default function AdminDriversPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={NO_TEAM}>No Team</SelectItem>
-                        {availableTeams.map((team) => (
+                        {teams.map((team) => (
                           <SelectItem key={team.id} value={team.id.toString()}>
                             {team.name}
                           </SelectItem>

@@ -2,6 +2,24 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
 
+// Function to ensure there can be max 3 drivers in a team
+async function checkTeamDriverLimit(teamId: string, excludeDriverId?: string) {
+  const { data: teamDrivers, error } = await supabase
+    .from('drivers')
+    .select('id')
+    .eq('team', teamId);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const count = excludeDriverId
+    ? (teamDrivers || []).filter((d: any) => d.id !== excludeDriverId).length
+    : (teamDrivers?.length || 0);
+
+  if (count >= 3) {
+    return NextResponse.json({ error: 'A team cannot have more than 3 drivers.' }, { status: 400 });
+  }
+  return null;
+}
+
 export async function GET() {
   const { data: drivers, error } = await supabase.from('drivers').select('*');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -10,16 +28,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const { name, teamId } = await request.json();
-  // Enforce max 2 drivers per team
+  // Enforce max 3 drivers per team
   if (teamId) {
-    const { data: teamDrivers, error: teamDriversError } = await supabase
-      .from('drivers')
-      .select('id')
-      .eq('team', teamId);
-    if (teamDriversError) return NextResponse.json({ error: teamDriversError.message }, { status: 500 });
-    if ((teamDrivers?.length || 0) >= 2) {
-      return NextResponse.json({ error: 'A team cannot have more than 2 drivers.' }, { status: 400 });
-    }
+    const res = await checkTeamDriverLimit(teamId);
+    if (res) return res;
   }
   const { data, error } = await supabase.from('drivers').insert([
     {
@@ -38,16 +50,9 @@ export async function PUT(request: Request) {
   if (points !== undefined) update.points = points;
   if (teamId !== undefined) {
     if (teamId) {
-      // Enforce max 2 drivers per team (excluding this driver)
-      const { data: teamDrivers, error: teamDriversError } = await supabase
-        .from('drivers')
-        .select('id')
-        .eq('team', teamId);
-      if (teamDriversError) return NextResponse.json({ error: teamDriversError.message }, { status: 500 });
-      const filtered = (teamDrivers || []).filter((d: any) => d.id !== driverId);
-      if (filtered.length >= 2) {
-        return NextResponse.json({ error: 'A team cannot have more than 2 drivers.' }, { status: 400 });
-      }
+      // Enforce max 3 drivers per team (excluding this driver)
+      const res = await checkTeamDriverLimit(teamId, driverId);
+      if (res) return res;
     }
     update.team = teamId || null;
   }

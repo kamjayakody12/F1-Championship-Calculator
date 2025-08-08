@@ -13,7 +13,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import type { Rules } from "@/models/Rules";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, GripVertical } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -35,7 +35,7 @@ interface ResultRow {
   driverId: string;
   pole: boolean;
   fastestLap: boolean;
-  racefinished : boolean;
+  racefinished: boolean; // kept for payload/points, but always true for assigned rows
 }
 
 const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
@@ -51,6 +51,8 @@ export default function AdminDashboardPage() {
   const [results, setResults] = useState<ResultRow[]>([]);
   const [rules, setRules] = useState<Rules | null>(null);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const [draggingPos, setDraggingPos] = useState<number | null>(null);
+  const [dragOverPos, setDragOverPos] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/drivers").then((r) => r.json()).then(setDrivers);
@@ -72,17 +74,9 @@ export default function AdminDashboardPage() {
       .then(setRules);
   }, []);
 
+  // Initialize with no selected rows; pool shows all drivers
   useEffect(() => {
-    setResults(
-      drivers.map((driver, i) => ({
-        position: i + 1,
-        driverId: "",
-        pole: false,
-        fastestLap: false,
-        currentPoints: driver.points || 0,
-        racefinished: true,
-      }))
-    );
+    setResults([]);
   }, [drivers]);
 
   function handleTrackChange(trackIdAndType: string) {
@@ -103,30 +97,21 @@ export default function AdminDashboardPage() {
         if (data.length) {
           setIsUpdating(true);
           setResults(
-            data.map((row) => {
-              const driver = drivers.find((d) => d.id === row.driver);
-              return {
-                position: row.position,
+            // Load only finished drivers into the table; DNFs remain in the pool
+            data
+              .filter((row) => !!row.racefinished)
+              .sort((a, b) => a.position - b.position)
+              .map((row, idx) => ({
+                position: idx + 1,
                 driverId: row.driver,
-                pole: !!row.pole, // ensure boolean
-                fastestLap: !!row.fastestlap, // ensure boolean
-                currentPoints: driver ? driver.points : 0,
-                racefinished: !!row.racefinished,
-              };
-            })
+                pole: !!row.pole,
+                fastestLap: !!row.fastestlap,
+                racefinished: true,
+              }))
           );
         } else {
           setIsUpdating(false);
-          setResults(
-            drivers.map((driver, i) => ({
-              position: i + 1,
-              driverId: "",
-              pole: false,
-              fastestLap: false,
-              currentPoints: driver.points || 0,
-              racefinished: true
-            }))
-          );
+          setResults([]);
         }
       });
   }
@@ -135,6 +120,41 @@ export default function AdminDashboardPage() {
     setResults((prev) =>
       prev.map((r) => (r.position === pos ? { ...r, driverId: id } : r))
     );
+  }
+
+  // Add a driver from the pool to the first available (empty) position
+  function addDriverFromPool(driverId: string) {
+    setResults((prev) => [
+      ...prev,
+      {
+        position: prev.length + 1,
+        driverId,
+        pole: false,
+        fastestLap: false,
+        racefinished: true,
+      },
+    ]);
+  }
+
+  // Remove an assigned driver at the given position back to the pool
+  function clearDriverAtPosition(position: number) {
+    setResults((prev) =>
+      prev
+        .filter((r) => r.position !== position)
+        .map((r, idx) => ({ ...r, position: idx + 1 }))
+    );
+  }
+
+  function moveRow(sourcePos: number, targetPos: number) {
+    if (sourcePos === targetPos) return;
+    setResults((prev) => {
+      const arr = [...prev];
+      const srcIdx = Math.max(0, Math.min(arr.length - 1, sourcePos - 1));
+      const tgtIdx = Math.max(0, Math.min(arr.length - 1, targetPos - 1));
+      const [moved] = arr.splice(srcIdx, 1);
+      arr.splice(tgtIdx, 0, moved);
+      return arr.map((r, idx) => ({ ...r, position: idx + 1 }));
+    });
   }
   function togglePole(pos: number) {
     setResults((prev) =>
@@ -148,11 +168,7 @@ export default function AdminDashboardPage() {
       })
     );
   }
-  function toggleRaceFinished(pos: number) {
-    setResults((prev) =>
-      prev.map((r) => (r.position === pos ? { ...r, racefinished: !r.racefinished} : r))
-    );
-  }
+  // Race finished is implied by being in the table; no separate toggle needed
   function toggleFastestLap(pos: number) {
     setResults((prev) =>
       prev.map((r) => {
@@ -171,8 +187,19 @@ export default function AdminDashboardPage() {
       toast.error("Please select a track");
       return;
     }
-    if (results.some((r) => !r.driverId))
-      return toast.error("Select a driver for every position");
+    // Build payload: assigned results (table rows) + unassigned drivers as DNFs
+    const assigned = results;
+    const unassignedDrivers = drivers.filter(
+      (d) => !assigned.some((r) => r.driverId === d.id)
+    );
+    const dnfs = unassignedDrivers.map((d, index) => ({
+      position: assigned.length + index + 1,
+      driverId: d.id,
+      pole: false,
+      fastestLap: false,
+      racefinished: false,
+    }));
+    const resultsToSend = [...assigned, ...dnfs];
     
     const method = isUpdating ? "PUT" : "POST";
     const endpoint = isUpdating ? `/api/results/${selectedTrackId}` : "/api/results";
@@ -184,7 +211,7 @@ export default function AdminDashboardPage() {
         body: JSON.stringify({ 
           track: selectedTrackId, // Use selected_tracks.id
           trackType: selectedTrackType,
-          results 
+          results: resultsToSend 
         }),
       });
       
@@ -217,15 +244,10 @@ export default function AdminDashboardPage() {
     return base + poleBonus + fastestLapBonus;
   }
 
-  // Helper to get available drivers for a given position (no duplicates)
-  function availableDrivers(currentPosition: number) {
+  // Drivers that are not yet placed in the results table
+  function poolDrivers() {
     return drivers.filter(
-      (d) =>
-        !results.some(
-          (r) =>
-            r.position !== currentPosition &&
-            r.driverId === d.id
-        )
+      (d) => !results.some((r) => r.driverId === d.id)
     );
   }
 
@@ -277,6 +299,23 @@ export default function AdminDashboardPage() {
               </p>
             </div>
           )}
+          {/* Driver Pool (red-box area) */}
+          <div className="mb-3 rounded-lg border border-red-500/40 bg-red-500/5 p-3">
+            <div className="text-xs mb-2 text-muted-foreground">Available Drivers</div>
+            <div className="flex flex-wrap gap-2">
+              {poolDrivers().map((d) => (
+                <Button
+                  key={d.id}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => addDriverFromPool(d.id)}
+                >
+                  {d.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+
           <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
             <table className="min-w-full table-auto divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-800">
@@ -287,12 +326,7 @@ export default function AdminDashboardPage() {
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide sm:px-6 sm:py-3">
                     Driver
                   </th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide sm:px-6 sm:py-3">
-                    <div className="flex flex-col items-center">
-                      <span>Race</span>
-                      <span>Finished</span>
-                    </div>
-                  </th>
+                  {/* Race Finished column removed; assigned rows are considered finished */}
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide sm:px-6 sm:py-3">
                     Pole
                   </th>
@@ -309,40 +343,56 @@ export default function AdminDashboardPage() {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-600">
                 {results.map((r) => (
-                  <tr
-                    key={r.position}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors sm:hover:bg-gray-100"
-                  >
+                <tr
+                  key={r.position}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOverPos(r.position);
+                  }}
+                  onDrop={(e) => {
+                    const src = Number(e.dataTransfer.getData("text/plain"));
+                    moveRow(src, r.position);
+                    setDraggingPos(null);
+                    setDragOverPos(null);
+                  }}
+                  className={`transition-colors sm:hover:bg-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                    dragOverPos === r.position ? "ring-2 ring-primary/40" : ""
+                  }`}
+                >
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 sm:px-6">
-                      {r.position}
+                      <button
+                        className="inline-flex items-center gap-2 cursor-grab active:cursor-grabbing select-none"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", String(r.position));
+                          setDraggingPos(r.position);
+                        }}
+                        onDragEnd={() => {
+                          setDraggingPos(null);
+                          setDragOverPos(null);
+                        }}
+                        title="Drag to reorder"
+                        aria-label="Drag handle"
+                      >
+                        <GripVertical className="h-4 w-4 opacity-60" />
+                        <span>P{r.position}</span>
+                      </button>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap sm:px-6">
-                      <Select
-                        value={r.driverId || "none"}
-                        onValueChange={(id) => updateDriver(r.position, id === "none" ? "" : id)}
-                      >
-                        <SelectTrigger className="w-40 text-sm sm:w-48">
-                          <SelectValue placeholder="Select…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">-- None --</SelectItem>
-                          {availableDrivers(r.position).map((d) => (
-                            <SelectItem key={d.id} value={d.id}>
-                              {d.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {r.driverId ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => clearDriverAtPosition(r.position)}
+                          title="Click to remove this driver back to the pool"
+                        >
+                          {drivers.find((d) => d.id === r.driverId)?.name || "Driver"}
+                        </Button>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Empty</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 sm:px-6">
-                      <div className="flex justify-center">
-                        <Checkbox
-                          checked={!!r.racefinished}
-                          onCheckedChange={() => toggleRaceFinished(r.position)}
-                          aria-label="Race Finished"
-                        />
-                      </div>
-                    </td>
+                    {/* Race Finished cell removed */}
                     <td className="px-4 py-3 sm:px-6">
                       <div className="flex justify-center">
                         <Checkbox
