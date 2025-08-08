@@ -97,16 +97,14 @@ export default function AdminDashboardPage() {
         if (data.length) {
           setIsUpdating(true);
           setResults(
-            // Load only finished drivers into the table; DNFs remain in the pool
             data
-              .filter((row) => !!row.racefinished)
               .sort((a, b) => a.position - b.position)
               .map((row, idx) => ({
                 position: idx + 1,
                 driverId: row.driver,
                 pole: !!row.pole,
                 fastestLap: !!row.fastestlap,
-                racefinished: true,
+                racefinished: !!row.racefinished,
               }))
           );
         } else {
@@ -168,7 +166,11 @@ export default function AdminDashboardPage() {
       })
     );
   }
-  // Race finished is implied by being in the table; no separate toggle needed
+  function toggleRaceFinished(pos: number) {
+    setResults((prev) =>
+      prev.map((r) => (r.position === pos ? { ...r, racefinished: !r.racefinished } : r))
+    );
+  }
   function toggleFastestLap(pos: number) {
     setResults((prev) =>
       prev.map((r) => {
@@ -333,7 +335,12 @@ export default function AdminDashboardPage() {
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide sm:px-6 sm:py-3">
                     Driver
                   </th>
-                  {/* Race Finished column removed; assigned rows are considered finished */}
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide sm:px-6 sm:py-3">
+                    <div className="flex flex-col items-center">
+                      <span>Race</span>
+                      <span>Finished</span>
+                    </div>
+                  </th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide sm:px-6 sm:py-3">
                     Pole
                   </th>
@@ -399,7 +406,15 @@ export default function AdminDashboardPage() {
                         <span className="text-sm text-muted-foreground">Empty</span>
                       )}
                     </td>
-                    {/* Race Finished cell removed */}
+                    <td className="px-4 py-3 sm:px-6">
+                      <div className="flex justify-center">
+                        <Checkbox
+                          checked={!!r.racefinished}
+                          onCheckedChange={() => toggleRaceFinished(r.position)}
+                          aria-label="Race Finished"
+                        />
+                      </div>
+                    </td>
                     <td className="px-4 py-3 sm:px-6">
                       <div className="flex justify-center">
                         <Checkbox
