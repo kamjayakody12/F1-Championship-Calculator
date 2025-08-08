@@ -216,7 +216,14 @@ export default function AdminDashboardPage() {
       });
       
       if (!response.ok) {
-        throw new Error(`Failed to ${isUpdating ? 'update' : 'save'} results`);
+        // Try to show server-provided error
+        let msg = `Failed to ${isUpdating ? 'update' : 'save'} results`;
+        try {
+          const data = await response.json();
+          if (data?.error) msg = data.error;
+        } catch (_) {}
+        toast.error(msg);
+        return;
       }
       
       toast.success(isUpdating ? "Results updated!" : "Results saved!");

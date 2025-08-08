@@ -83,13 +83,21 @@ export async function PUT(
     return NextResponse.json({ error: deleteError.message }, { status: 500 });
   }
 
-  // Now insert the new results
+  // Now insert the new results and update running points
   for (const row of results) {
     if (!row.driverId) continue;
-    
-    // TODO: Add team column to results table in Supabase
-    // For now, we'll skip the team field until the database schema is updated
-    
+    // Fetch driver's current team and points
+    const { data: driverTeamData, error: driverTeamError } = await supabase
+      .from("drivers")
+      .select("team, points")
+      .eq("id", row.driverId)
+      .single();
+    if (driverTeamError) {
+      console.error("Error fetching driver team:", driverTeamError);
+      return NextResponse.json({ error: driverTeamError.message }, { status: 500 });
+    }
+    const teamId = driverTeamData?.team ?? null;
+    const currentDriverPoints = driverTeamData?.points ?? 0;
     // If driver didn't finish the race, they get zero points
     if (!row.racefinished) {
       // Save the race result with 0 points
@@ -98,7 +106,6 @@ export async function PUT(
           track,
           position: row.position,
           driver: row.driverId,
-          // team: driverTeamData.team, // TODO: Add team column to results table
           pole: row.pole,
           fastestlap: row.fastestLap, // use lowercase column name
           racefinished: row.racefinished
@@ -126,7 +133,6 @@ export async function PUT(
         track,
         position: row.position,
         driver: row.driverId,
-                  // team: driverTeamData.team, // TODO: Add team column to results table
         pole: row.pole,
         fastestlap: row.fastestLap, // use lowercase column name
         racefinished: row.racefinished
@@ -137,59 +143,41 @@ export async function PUT(
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
     
-    // Fetch current driver points from DB
-    const { data: driverPointsData, error: fetchError } = await supabase
-      .from("drivers")
-      .select("points")
-      .eq("id", row.driverId)
-      .single();
-    if (fetchError) {
-      console.error("Error fetching driver points:", fetchError);
-      return NextResponse.json({ error: fetchError.message }, { status: 500 });
-    }
-    const currentPoints = driverPointsData?.points || 0;
-    
     // Update the driver's total championship points
     const { error: updateError } = await supabase
       .from("drivers")
-      .update({ points: currentPoints + totalPoints })
+      .update({ points: currentDriverPoints + totalPoints })
       .eq("id", row.driverId);
     if (updateError) {
       console.error("Error updating driver points:", updateError);
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
-    console.log(`Updated result for driver ${row.driverId}, updated points to ${currentPoints + totalPoints}`);
+    console.log(`Updated result for driver ${row.driverId}, updated points to ${currentDriverPoints + totalPoints}`);
+
+    // Increment the constructor (team) points for the current team
+    if (teamId) {
+      const { data: teamData, error: teamFetchError } = await supabase
+        .from("teams")
+        .select("points")
+        .eq("id", teamId)
+        .single();
+      if (teamFetchError) {
+        console.error("Error fetching team points:", teamFetchError);
+        return NextResponse.json({ error: teamFetchError.message }, { status: 500 });
+      }
+      const teamPoints = teamData?.points ?? 0;
+      const { error: teamUpdateError } = await supabase
+        .from("teams")
+        .update({ points: teamPoints + totalPoints })
+        .eq("id", teamId);
+      if (teamUpdateError) {
+        console.error("Error updating team points:", teamUpdateError);
+        return NextResponse.json({ error: teamUpdateError.message }, { status: 500 });
+      }
+    }
   }
 
-  // Constructors calculation
-  // 1. Fetch all teams
-  const { data: teams, error: teamsError } = await supabase.from("teams").select("id");
-  if (teamsError) {
-    console.error("Error fetching teams:", teamsError);
-    return NextResponse.json({ error: teamsError.message }, { status: 500 });
-  }
-  // 2. For each team, sum points of all drivers in that team
-  for (const team of teams) {
-    const { data: teamDrivers, error: driversError } = await supabase
-      .from("drivers")
-      .select("points")
-      .eq("team", team.id);
-    if (driversError) {
-      console.error(`Error fetching drivers for team ${team.id}:`, driversError);
-      return NextResponse.json({ error: driversError.message }, { status: 500 });
-    }
-    const teamPoints = (teamDrivers || []).reduce((sum, d) => sum + (d.points || 0), 0);
-    // 3. Update the team's points
-    const { error: updateTeamError } = await supabase
-      .from("teams")
-      .update({ points: teamPoints })
-      .eq("id", team.id);
-    if (updateTeamError) {
-      console.error(`Error updating team points for team ${team.id}:`, updateTeamError);
-      return NextResponse.json({ error: updateTeamError.message }, { status: 500 });
-    }
-    console.log(`Updated team ${team.id} points to ${teamPoints}`);
-  }
+  // No global recompute; team points were adjusted incrementally
 
   return NextResponse.json({ success: true });
 } 

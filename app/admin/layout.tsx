@@ -33,7 +33,7 @@ export default function AdminLayout({
           <SidebarInset className="flex flex-col min-h-screen">
             <SiteHeader />
             <Toaster position="top-center" />
-            <main className="flex-1 p-6 overflow-auto">{children}</main>
+            <main className="flex-1 p-6 overflow-auto pt-4">{children}</main>
           </SidebarInset>
         </SidebarProvider>
       </ThemeProvider>

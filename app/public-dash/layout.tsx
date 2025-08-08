@@ -28,12 +28,12 @@ export default function AdminLayout({
         <AppSidebar variant="sidebar" />
 
         {/* the rest of the page */}
-        <SidebarInset>
+        <SidebarInset className="flex flex-col min-h-screen">
           <SiteHeader />
           <Toaster position="top-center" />
           <KeyboardShortcuts />
           <ShortcutHint />
-          <main >{children}</main>
+          <main className="flex-1 overflow-auto pt-4">{children}</main>
         </SidebarInset>
       </SidebarProvider>
     </ThemeProvider>
