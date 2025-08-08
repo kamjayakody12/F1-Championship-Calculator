@@ -189,19 +189,9 @@ export default function AdminDashboardPage() {
       toast.error("Please select a track");
       return;
     }
-    // Build payload: assigned results (table rows) + unassigned drivers as DNFs
-    const assigned = results;
-    const unassignedDrivers = drivers.filter(
-      (d) => !assigned.some((r) => r.driverId === d.id)
-    );
-    const dnfs = unassignedDrivers.map((d, index) => ({
-      position: assigned.length + index + 1,
-      driverId: d.id,
-      pole: false,
-      fastestLap: false,
-      racefinished: false,
-    }));
-    const resultsToSend = [...assigned, ...dnfs];
+    // Build payload: ONLY assigned results (drivers dragged from the pool started the race)
+    // Drivers left in the pool are considered DNS (Did Not Start) and are NOT sent or counted as DNFs
+    const resultsToSend = results;
     
     const method = isUpdating ? "PUT" : "POST";
     const endpoint = isUpdating ? `/api/results/${selectedTrackId}` : "/api/results";

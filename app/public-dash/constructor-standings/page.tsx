@@ -75,6 +75,7 @@ export default function ConstructorStandingsPage() {
   const [chartData, setChartData] = useState<any[]>([]);
   const [rankingData, setRankingData] = useState<any[]>([]);
   const [statsData, setStatsData] = useState<TeamStatsData[]>([]);
+  const [distributionData, setDistributionData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTeam, setActiveTeam] = useState<string>("all");
   const [tracks, setTracks] = useState<any[]>([]);
@@ -361,6 +362,7 @@ export default function ConstructorStandingsPage() {
          
          // Group schedules by track to combine race and sprint
          const trackGroups = new Map<string, any[]>();
+         const distributionRows: any[] = [];
          
          sortedSchedules.forEach((schedule, originalRaceIndex) => {
            const selectedTrack = selectedTrackMap.get(schedule.track);
@@ -378,7 +380,7 @@ export default function ConstructorStandingsPage() {
            }
          });
          
-         // Process each track group
+        // Process each track group
          trackGroups.forEach((schedules, trackId) => {
            // Check if any schedule for this track has results
            const hasResults = schedules.some(({ schedule }) => {
@@ -387,20 +389,26 @@ export default function ConstructorStandingsPage() {
              return raceResultsForTrack.length > 0;
            });
            
-           if (hasResults) {
+          if (hasResults) {
              // Get the first schedule for this track (earliest date)
              const firstSchedule = schedules[0];
              const selectedTrack = firstSchedule.selectedTrack;
              
-             // Calculate combined points for this track
-             const combinedPoints = new Map<string, number>();
+            // Calculate combined cumulative points for this track (for progression)
+            const combinedPoints = new Map<string, number>();
+            // Calculate raw event points for this track (for distribution)
+            const rawPoints = new Map<string, number>();
              
-             schedules.forEach(({ originalRaceIndex }) => {
+            schedules.forEach(({ originalRaceIndex }) => {
                teamsData.forEach(team => {
                  const progression = teamPointsProgression.get(team.id);
                  const currentPoints = combinedPoints.get(team.id) || 0;
                  const pointsThisEvent = progression?.[originalRaceIndex] || 0;
                  combinedPoints.set(team.id, currentPoints + pointsThisEvent);
+                // Raw points for this event only = cumulative at index - cumulative at previous index
+                const prev = originalRaceIndex > 0 ? (progression?.[originalRaceIndex - 1] || 0) : 0;
+                const eventPoints = (progression?.[originalRaceIndex] || 0) - prev;
+                rawPoints.set(team.id, (rawPoints.get(team.id) || 0) + Math.max(0, eventPoints));
                });
              });
              
@@ -415,6 +423,18 @@ export default function ConstructorStandingsPage() {
              });
              
              chartDataArray.push(dataPoint);
+
+            // Build distribution row (horizontal stacked bars by team)
+            const distRow: any = {
+              race: `${selectedTrack?.track?.name || 'Unknown'} (${new Date(firstSchedule.schedule.date).toLocaleDateString()})`,
+              trackNameOnly: selectedTrack?.track?.name || 'Unknown',
+              selectedTrackId: selectedTrack?.id,
+              date: firstSchedule.schedule.date
+            };
+            teamsData.forEach(team => {
+              distRow[team.name] = rawPoints.get(team.id) || 0;
+            });
+            distributionRows.push(distRow);
              completedRoundIndex++;
            }
          });
@@ -423,7 +443,9 @@ export default function ConstructorStandingsPage() {
 
          console.log('Team progression summary:', Object.fromEntries(teamPointsProgression));
 
-                setChartData(chartDataArray);
+        setChartData(chartDataArray);
+        // Save distribution data (sorted by date like chartData)
+        setDistributionData(distributionRows);
 
         // Calculate ranking evolution data
         const rankingDataArray: any[] = [];
@@ -588,11 +610,86 @@ export default function ConstructorStandingsPage() {
         </div>
       </header>
 
-                                                       {/* Charts Container */}
-         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-           {/* Points Progression Chart */}
-           <Card>
-           <CardHeader className="flex flex-col items-stretch border-b !p-0 sm:flex-row">
+      {/* Dashboard Layout: Left table, right charts (2x2) */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        {/* Left: Constructor Standings Table */}
+        <div className="xl:col-span-3">
+          <div className="bg-white dark:bg-card rounded-2xl shadow border border-gray-200 dark:border-border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Position</TableHead>
+                  <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Constructor</TableHead>
+                  <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Drivers</TableHead>
+                  <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Points</TableHead>
+                  <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Evolution</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {teams.map((team: any, idx: number) => {
+                  const evo = getEvolution(idx, undefined);
+                  return (
+                    <TableRow key={team.id} className="border-b border-gray-100 dark:border-border last:border-0 hover:bg-gray-50 dark:hover:bg-muted/30 transition">
+                      <TableCell className="py-4 px-6">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl font-bold text-gray-700 dark:text-gray-100">{idx + 1}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-4 px-6">
+                        <div className="flex items-center gap-3">
+                          {/* Team logo */}
+                          {(() => {
+                            const logoUrl = extractImageUrl(team.logo || '');
+                            return logoUrl ? (
+                              <img
+                                src={logoUrl}
+                                alt={`${team.name} logo`}
+                                className="w-10 h-10 object-contain"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                }}
+                              />
+                            ) : (
+                          <span className="inline-block w-10 h-10 bg-gray-2 00 dark:bg-muted rounded-full flex-shrink-0" />
+                            );
+                          })()}
+                          <div>
+                            <span className="font-semibold text-lg text-gray-900 dark:text-gray-100">{team.name}</span>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-4 px-6">
+                        <div className="space-y-1">
+                          {team.drivers.map((driver: any) => (
+                            <div key={driver.id} className="text-sm text-gray-600 dark:text-gray-300">
+                              {driver.name} ({driver.points || 0} pts)
+                            </div>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-4 px-6">
+                        <span className="text-xl font-bold text-gray-900 dark:text-gray-100">{team.constructorPoints}</span>
+                      </TableCell>
+                      <TableCell className={`py-4 px-6 font-medium ${evo.color}`}>
+                        <div className="flex items-center gap-1">
+                          {evo.icon}
+                          <span className="font-semibold">{evo.value}</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
+        {/* Right: 2x2 charts grid */}
+        <div className="xl:col-span-9 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Points Progression Chart */}
+          <Card>
+            <CardHeader className="flex flex-col items-stretch border-b !p-0 sm:flex-row">
              <div className="flex flex-1 flex-col justify-center gap-1 px-6 pb-3 sm:pb-0">
                <CardTitle>Constructor Points Progression</CardTitle>
                <CardDescription>
@@ -617,19 +714,19 @@ export default function ConstructorStandingsPage() {
                ))}
              </div>
            </CardHeader>
-           <CardContent className="px-2 sm:p-6">
+            <CardContent className="p-2 sm:p-3">
              <ChartContainer
                config={chartConfig}
-               className="aspect-auto h-[400px] w-full"
+                className="w-full h-[520px]"
              >
                <LineChart
                  accessibilityLayer
                  data={chartData}
                  margin={{
-                   left: 12,
-                   right: 12,
-                   top: 12,
-                   bottom: 12,
+                   left: 8,
+                   right: 8,
+                   top: 6,
+                   bottom: 6,
                  }}
                >
                  <CartesianGrid vertical={false} />
@@ -746,29 +843,29 @@ export default function ConstructorStandingsPage() {
                </LineChart>
              </ChartContainer>
            </CardContent>
-                                       </Card>
+          </Card>
 
-                    {/* Constructor Ranking Evolution Chart */}
-           <Card>
+          {/* Constructor Ranking Evolution Chart */}
+          <Card>
              <CardHeader>
                <CardTitle>Constructor Ranking Evolution</CardTitle>
                <CardDescription>
                  Position changes in the constructor standings across rounds
                </CardDescription>
              </CardHeader>
-             <CardContent className="px-2 sm:p-6">
+            <CardContent className="p-2 sm:p-3">
                <ChartContainer
                  config={chartConfig}
-                 className="aspect-auto h-[400px] w-full"
+                className="w-full h-[520px]"
                >
                  <LineChart
                    accessibilityLayer
                    data={rankingData}
                    margin={{
-                     left: 12,
-                     right: 80,
-                     top: 12,
-                     bottom: 12,
+                    left: 8,
+                    right: 120,
+                    top: 6,
+                    bottom: 6,
                    }}
                  >
                   <CartesianGrid vertical={false} />
@@ -901,10 +998,10 @@ export default function ConstructorStandingsPage() {
                           
                           return (
                             <text
-                              x={x + 10}
+                              x={x + 16}
                               y={y + 4}
                               fill={teamColor}
-                              fontSize={12}
+                              fontSize={13}
                               fontWeight="600"
                               textAnchor="start"
                             >
@@ -920,25 +1017,23 @@ export default function ConstructorStandingsPage() {
               </ChartContainer>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Team Statistics Chart */}
-        <div className="mb-8">
+          {/* Stats Bar Chart */}
           <Card>
             <CardHeader>
-              <CardTitle>Team Statistics</CardTitle>
+              <CardTitle>Stats</CardTitle>
               <CardDescription>Wins (1st), podiums (2nd-3rd), points finishes (4th-10th), pole positions, and DNFs by team</CardDescription>
             </CardHeader>
-            <CardContent>
-              <ChartContainer config={statsChartConfig}>
+            <CardContent className="p-2 sm:p-3">
+              <ChartContainer config={statsChartConfig} className="w-full h-[520px]">
                 <BarChart 
                   accessibilityLayer 
                   data={statsData}
                   margin={{
-                    left: 20,
-                    right: 20,
-                    top: 20,
-                    bottom: 60,
+                    left: 12,
+                    right: 12,
+                    top: 8,
+                    bottom: 40,
                   }}
                 >
                   <CartesianGrid vertical={false} />
@@ -1117,23 +1212,6 @@ export default function ConstructorStandingsPage() {
                       const teamColors = getTeamColorVariations(teamName);
                       return <rect {...rest} fill={teamColors.pointsFinishes} />;
                     }}
-                    label={(props: any) => {
-                      const { x, y, width, height, value } = props;
-                      if (value === 0 || height < 15) return null;
-                      return (
-                        <text
-                          x={x + width / 2}
-                          y={y + height / 2}
-                          fill="white"
-                          textAnchor="middle"
-                          dy="0.3em"
-                          fontSize="9"
-                          fontWeight="bold"
-                        >
-                          {value}
-                        </text>
-                      );
-                    }}
                   />
                   
                   {/* Podiums (2nd-3rd) */}
@@ -1146,23 +1224,6 @@ export default function ConstructorStandingsPage() {
                       const teamName = props.payload?.teamName;
                       const teamColors = getTeamColorVariations(teamName);
                       return <rect {...rest} fill={teamColors.podiums} />;
-                    }}
-                    label={(props: any) => {
-                      const { x, y, width, height, value } = props;
-                      if (value === 0 || height < 15) return null;
-                      return (
-                        <text
-                          x={x + width / 2}
-                          y={y + height / 2}
-                          fill="white"
-                          textAnchor="middle"
-                          dy="0.3em"
-                          fontSize="9"
-                          fontWeight="bold"
-                        >
-                          {value}
-                        </text>
-                      );
                     }}
                   />
                   
@@ -1177,23 +1238,6 @@ export default function ConstructorStandingsPage() {
                       const teamColors = getTeamColorVariations(teamName);
                       return <rect {...rest} fill={teamColors.wins} />;
                     }}
-                    label={(props: any) => {
-                      const { x, y, width, height, value } = props;
-                      if (value === 0 || height < 15) return null;
-                      return (
-                        <text
-                          x={x + width / 2}
-                          y={y + height / 2}
-                          fill="white"
-                          textAnchor="middle"
-                          dy="0.3em"
-                          fontSize="9"
-                          fontWeight="bold"
-                        >
-                          {value}
-                        </text>
-                      );
-                    }}
                   />
                   
                   {/* Poles */}
@@ -1206,23 +1250,6 @@ export default function ConstructorStandingsPage() {
                       const teamName = props.payload?.teamName;
                       const teamColors = getTeamColorVariations(teamName);
                       return <rect {...rest} fill={teamColors.poles} />;
-                    }}
-                    label={(props: any) => {
-                      const { x, y, width, height, value } = props;
-                      if (value === 0 || height < 15) return null;
-                      return (
-                        <text
-                          x={x + width / 2}
-                          y={y + height / 2}
-                          fill="white"
-                          textAnchor="middle"
-                          dy="0.3em"
-                          fontSize="9"
-                          fontWeight="bold"
-                        >
-                          {value}
-                        </text>
-                      );
                     }}
                   />
                   
@@ -1237,99 +1264,107 @@ export default function ConstructorStandingsPage() {
                       const teamColors = getTeamColorVariations(teamName);
                       return <rect {...rest} fill={teamColors.dnfs} />;
                     }}
-                    label={(props: any) => {
-                      const { x, y, width, height, value } = props;
-                      if (value === 0 || height < 15) return null;
-                      return (
-                        <text
-                          x={x + width / 2}
-                          y={y + height / 2}
-                          fill="white"
-                          textAnchor="middle"
-                          dy="0.3em"
-                          fontSize="9"
-                          fontWeight="bold"
-                        >
-                          {value}
-                        </text>
-                      );
-                    }}
                   />
                 </BarChart>
               </ChartContainer>
             </CardContent>
           </Card>
-        </div>
 
-       {/* Constructor Standings Table */}
-      <div className="bg-white dark:bg-card rounded-2xl shadow border border-gray-200 dark:border-border overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Position</TableHead>
-              <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Constructor</TableHead>
-              <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Drivers</TableHead>
-              <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Points</TableHead>
-              <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Evolution</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {teams.map((team: any, idx: number) => {
-              const evo = getEvolution(idx, undefined);
-              return (
-                <TableRow key={team.id} className="border-b border-gray-100 dark:border-border last:border-0 hover:bg-gray-50 dark:hover:bg-muted/30 transition">
-                  <TableCell className="py-4 px-6">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl font-bold text-gray-700 dark:text-gray-100">{idx + 1}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-4 px-6">
-                    <div className="flex items-center gap-3">
-                      {/* Team logo */}
-                      {(() => {
-                        const logoUrl = extractImageUrl(team.logo || '');
-                        return logoUrl ? (
-                          <img
-                            src={logoUrl}
-                            alt={`${team.name} logo`}
-                            className="w-10 h-10 object-contain"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                              e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                            }}
-                          />
-                        ) : (
-                          <span className="inline-block w-10 h-10 bg-gray-200 dark:bg-muted rounded-full flex-shrink-0" />
+          {/* Points Distribution by Track (Horizontal Stacked Bars) */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Points Distribution</CardTitle>
+              <CardDescription>
+                Split of points earned by each team per track (horizontal stacked bars)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-1 sm:p-2">
+              <ChartContainer
+                config={chartConfig}
+                className="w-full"
+                style={{ height: Math.max(520, distributionData.length * 40) }}
+              >
+                <BarChart
+                  accessibilityLayer
+                  data={distributionData}
+                  layout="vertical"
+                  margin={{ left: 0, right: 16, top: 6, bottom: 6 }}
+                >
+                  <CartesianGrid horizontal={true} vertical={false} strokeDasharray="3 3" />
+                  <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 12 }} domain={[0, 'auto']} allowDataOverflow />
+                  <YAxis
+                    type="category"
+                    dataKey="trackNameOnly"
+                    width={170}
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(label: string) => label}
+                    tick={(props: any) => {
+                      const { x, y, payload } = props;
+                      const trackName = payload.value as string;
+                      const track = tracks.find((t) => t.name === trackName);
+                      if (track?.img) {
+                        return (
+                          <g transform={`translate(${x},${y})`}>
+                            <foreignObject x={-26} y={-10} width={24} height={16}>
+                              <div
+                                style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+                                dangerouslySetInnerHTML={{ __html: track.img }}
+                              />
+                            </foreignObject>
+                          </g>
                         );
-                      })()}
-                      <div>
-                        <span className="font-semibold text-lg text-gray-900 dark:text-gray-100">{team.name}</span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-4 px-6">
-                    <div className="space-y-1">
-                      {team.drivers.map((driver: any) => (
-                        <div key={driver.id} className="text-sm text-gray-600 dark:text-gray-300">
-                          {driver.name} ({driver.points || 0} pts)
+                      }
+                      return (
+                        <g transform={`translate(${x},${y})`}>
+                          <text x={0} y={0} dy={4} textAnchor="end" fill="#666" fontSize={12}>
+                            {trackName}
+                          </text>
+                        </g>
+                      );
+                    }}
+                  />
+                  <ChartTooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload || !payload.length) return null;
+                      return (
+                        <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                          <p className="font-medium text-sm mb-2">{label}</p>
+                          <div className="space-y-1">
+                            {payload
+                              .filter((p: any) => typeof p.value === 'number' && p.value > 0)
+                              .sort((a: any, b: any) => b.value - a.value)
+                              .map((entry: any, idx: number) => {
+                                const teamName = entry.dataKey as string;
+                                const color = chartConfig[teamName]?.color || entry.color;
+                                return (
+                                  <div key={`${teamName}-${idx}`} className="flex items-center gap-2 text-sm">
+                                    <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
+                                    <span>{teamName}</span>
+                                    <span className="ml-auto font-medium">{entry.value}</span>
+                                  </div>
+                                );
+                              })}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-4 px-6">
-                    <span className="text-xl font-bold text-gray-900 dark:text-gray-100">{team.constructorPoints}</span>
-                  </TableCell>
-                  <TableCell className={`py-4 px-6 font-medium ${evo.color}`}>
-                    <div className="flex items-center gap-1">
-                      {evo.icon}
-                      <span className="font-semibold">{evo.value}</span>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+                      );
+                    }}
+                  />
+                  {teams.map((team) => (
+                    <Bar
+                      key={`dist-${team.id}`}
+                      dataKey={team.name}
+                      stackId="distribution"
+                      radius={[0, 0, 0, 0]}
+                      fill={chartConfig[team.name]?.color}
+                    />
+                  ))}
+                </BarChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
