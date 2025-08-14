@@ -22,16 +22,41 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { createClient } from "@/utils/supabase/client";
 
 const NO_TEAM = "no-team";
 
 export default function AdminDriversPage() {
+  const supabase = createClient();
   const [drivers, setDrivers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [driverName, setDriverName] = useState("");
   const [driverTeamId, setDriverTeamId] = useState("");
+  const [driverImageFile, setDriverImageFile] = useState<File | null>(null);
+
+  async function uploadDriverImage(file: File, suggestedName: string): Promise<string | null> {
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const safeName = suggestedName.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 32);
+      const path = `drivers/${Date.now()}-${safeName}.${ext}`;
+      const { error } = await supabase.storage.from("driver-images").upload(path, file, { upsert: true });
+      if (error) {
+        toast.error("Image upload failed: " + error.message);
+        return null;
+      }
+      const { data } = supabase.storage.from("driver-images").getPublicUrl(path);
+      return data?.publicUrl || null;
+    } catch (e: any) {
+      toast.error("Image upload error");
+      return null;
+    }
+  }
 
   useEffect(() => {
+    // Optional: log session to verify authenticated role for Storage RLS
+    supabase.auth.getSession().then(({ data }) => {
+      console.log('Supabase session (admin/drivers):', data.session?.user?.email ?? null)
+    })
     fetchDrivers();
     fetchTeams();
   }, []);
@@ -69,18 +94,27 @@ export default function AdminDriversPage() {
       return;
     }
 
+    let imageUrl: string | undefined = undefined;
+    if (driverImageFile) {
+      const uploaded = await uploadDriverImage(driverImageFile, driverName || "driver");
+      if (!uploaded) return; // abort on failed upload
+      imageUrl = uploaded;
+    }
+
     const res = await fetch("/api/drivers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: driverName,
         teamId: driverTeamId,
+        image: imageUrl,
       }),
     });
 
     if (res.ok) {
       setDriverName("");
       setDriverTeamId("");
+      setDriverImageFile(null);
       fetchDrivers();
       toast.success("Driver added successfully!");
     } else {
@@ -201,6 +235,22 @@ export default function AdminDriversPage() {
                 </Select>
               </div>
 
+              {/* Image (upload from device) */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="driver-image-file" className="text-right">
+                  Image File
+                </Label>
+                <Input
+                  id="driver-image-file"
+                  type="file"
+                  accept="image/*"
+                  className="col-span-3"
+                  onChange={(e) => setDriverImageFile(e.target.files?.[0] || null)}
+                />
+              </div>
+
+              {/* Removed URL input: browse-only upload */}
+
               <DialogFooter>
                 <Button type="submit">Add Driver</Button>
               </DialogFooter>
@@ -225,7 +275,7 @@ export default function AdminDriversPage() {
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-600">
-            {drivers.map((driver) => {
+               {drivers.map((driver) => {
               const currentTeamId =
                 driver.team?.id?.toString() ??
                 (typeof driver.team === "string" ? driver.team : NO_TEAM);
@@ -264,7 +314,14 @@ export default function AdminDriversPage() {
                       </SelectContent>
                     </Select>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                    {/* Edit Image Dialog */}
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm">Edit Image</Button>
+                      </DialogTrigger>
+                      <EditImageContent driver={driver} onSaved={fetchDrivers} />
+                    </Dialog>
                     <Button
                       variant="destructive"
                       size="sm"
@@ -280,5 +337,76 @@ export default function AdminDriversPage() {
         </table>
       </div>
     </div>
+  );
+}
+
+function EditImageContent({ driver, onSaved }: { driver: any; onSaved: () => void }) {
+  const supabase = createClient();
+  const [image, setImage] = useState<string>(driver.image || "");
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function upload(file: File): Promise<string | null> {
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const safeName = (driver.name || "driver").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 32);
+      const path = `drivers/${Date.now()}-${safeName}.${ext}`;
+      const { error } = await supabase.storage.from("driver-images").upload(path, file, { upsert: false });
+      if (error) { toast.error("Image upload failed: " + error.message); return null; }
+      const { data } = supabase.storage.from("driver-images").getPublicUrl(path);
+      return data?.publicUrl || null;
+    } catch {
+      toast.error("Image upload error");
+      return null;
+    }
+  }
+
+  async function save() {
+    setSaving(true);
+    let url = image;
+    if (file) {
+      const uploaded = await upload(file);
+      if (!uploaded) { setSaving(false); return; }
+      url = uploaded;
+    }
+    const res = await fetch("/api/drivers", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ driverId: driver.id, image: url }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      onSaved();
+      toast.success("Driver image updated.");
+    } else {
+      let msg = "Unknown error";
+      try { const { error } = await res.json(); msg = error || msg; } catch {}
+      toast.error("Failed to update image: " + msg);
+    }
+  }
+
+  return (
+    <DialogContent className="sm:max-w-[425px]">
+      <DialogHeader>
+        <DialogTitle>Edit Driver Image</DialogTitle>
+        <DialogDescription>Update the image URL for {driver.name}.</DialogDescription>
+      </DialogHeader>
+      <div className="grid gap-4 py-4">
+        <div className="grid grid-cols-4 items-center gap-4">
+          <Label htmlFor="edit-driver-image-file" className="text-right">Image File</Label>
+          <Input
+            id="edit-driver-image-file"
+            type="file"
+            accept="image/*"
+            className="col-span-3"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+          />
+        </div>
+        {/* Removed URL input: browse-only upload */}
+      </div>
+      <DialogFooter>
+        <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }

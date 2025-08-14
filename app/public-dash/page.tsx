@@ -12,7 +12,7 @@ import {
 import { ArrowUp, ArrowDown } from "lucide-react";
 
 // Helper function to extract image URL from HTML string
-function extractImageUrl(htmlString: string): string {
+  function extractImageUrl(htmlString: string): string {
   if (!htmlString) return '';
   const match = htmlString.match(/src="([^"]+)"/);
   return match ? match[1] : '';

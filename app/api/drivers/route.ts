@@ -1,9 +1,9 @@
 // app/api/drivers/route.ts
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/db";
+import { createClient as createServerSupabase } from "@/utils/supabase/server";
 
 // Function to ensure there can be max 3 drivers in a team
-async function checkTeamDriverLimit(teamId: string, excludeDriverId?: string) {
+async function checkTeamDriverLimit(supabase: any, teamId: string, excludeDriverId?: string) {
   const { data: teamDrivers, error } = await supabase
     .from('drivers')
     .select('id')
@@ -21,16 +21,18 @@ async function checkTeamDriverLimit(teamId: string, excludeDriverId?: string) {
 }
 
 export async function GET() {
+  const supabase = await createServerSupabase();
   const { data: drivers, error } = await supabase.from('drivers').select('*');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(drivers);
 }
 
 export async function POST(request: Request) {
-  const { name, teamId } = await request.json();
+  const { name, teamId, image } = await request.json();
+  const supabase = await createServerSupabase();
   // Enforce max 3 drivers per team
   if (teamId) {
-    const res = await checkTeamDriverLimit(teamId);
+    const res = await checkTeamDriverLimit(supabase, teamId);
     if (res) return res;
   }
   const { data, error } = await supabase.from('drivers').insert([
@@ -38,6 +40,7 @@ export async function POST(request: Request) {
       name,
       team: teamId,
       points: 0,
+      image: image || null,
     },
   ]).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -45,16 +48,20 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const { driverId, points, teamId } = await request.json();
-  const update: { points?: number; team?: string | null } = {};
+  const { driverId, points, teamId, image } = await request.json();
+  const supabase = await createServerSupabase();
+  const update: { points?: number; team?: string | null; image?: string | null } = {};
   if (points !== undefined) update.points = points;
   if (teamId !== undefined) {
     if (teamId) {
       // Enforce max 3 drivers per team (excluding this driver)
-      const res = await checkTeamDriverLimit(teamId, driverId);
+      const res = await checkTeamDriverLimit(supabase, teamId, driverId);
       if (res) return res;
     }
     update.team = teamId || null;
+  }
+  if (image !== undefined) {
+    update.image = image || null;
   }
   const { data, error } = await supabase
     .from('drivers')
@@ -68,6 +75,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   const { driverId } = await request.json();
+  const supabase = await createServerSupabase();
   const { error } = await supabase.from('drivers').delete().eq('id', driverId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });

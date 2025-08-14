@@ -5,4 +5,5 @@ export interface Driver {
   name: string;
   team: string; // team id (foreign key)
   points: number;
+  image?: string | null;
 }
