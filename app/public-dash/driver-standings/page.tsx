@@ -154,7 +154,8 @@ export default function DriverStandingsPage() {
         const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
         let points = 0;
         if (result.racefinished) {
-          const basePoints = result.position <= 10 ? racePointsMapping[result.position - 1] : 0;
+          const pos = result.finishing_position ?? result.position; // support both column names
+          const basePoints = pos <= 10 ? racePointsMapping[(pos || 0) - 1] : 0;
           const bonusPoints = (result.pole ? 1 : 0) + (result.fastestlap ? 1 : 0);
           points = basePoints + bonusPoints;
         }
@@ -162,7 +163,7 @@ export default function DriverStandingsPage() {
           track: result.track,
           trackName: trackMap.get(result.track) || 'Unknown',
           date: schedule?.date || '',
-          position: result.position,
+          position: result.finishing_position ?? result.position,
           driver: result.driver,
           driverName: driver?.name || 'Unknown',
           teamId: driver?.team || '',

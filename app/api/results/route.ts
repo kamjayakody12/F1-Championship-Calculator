@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
+import { adminSupabase } from "@/utils/supabase/admin";
 
 const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 const sprintPointsMapping = [8, 7, 6, 5, 4, 3, 2, 1];
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
   console.log("Event type:", eventType); // Debug log
 
   // Disallow creating results if this track already has results (protect constructor totals)
-  const { data: existingResults, error: existingErr } = await supabase
+  const { data: existingResults, error: existingErr } = await adminSupabase
     .from("results")
     .select("id")
     .eq("track", track);
@@ -54,8 +55,9 @@ export async function POST(request: Request) {
   // Update driver and team points based on the race being saved
   for (const row of results) {
     if (!row.driverId) continue;
+    
     // Fetch the driver's current team and points
-    const { data: driverTeamData, error: driverTeamError } = await supabase
+    const { data: driverTeamData, error: driverTeamError } = await adminSupabase
       .from("drivers")
       .select("team, points")
       .eq("id", row.driverId)
@@ -67,14 +69,28 @@ export async function POST(request: Request) {
     const teamId: string | null = driverTeamData?.team ?? null;
     const currentDriverPoints: number = driverTeamData?.points ?? 0;
 
+    // Fetch qualifying position for this driver and track
+    const { data: qualifyingData, error: qualifyingError } = await adminSupabase
+      .from("qualifying")
+      .select("position")
+      .eq("track", track)
+      .eq("driver", row.driverId)
+      .single();
+    
+    const qualifyingPosition = qualifyingData?.position || null;
+    if (qualifyingError && qualifyingError.code !== 'PGRST116') { // PGRST116 = no rows found, which is OK
+      console.warn(`Warning: Could not fetch qualifying position for driver ${row.driverId}:`, qualifyingError);
+    }
+
     // If driver didn't finish the race, they get zero points
     if (!row.racefinished) {
       // Save the race result with 0 points effect
-      const { error: insertError } = await supabase.from("results").insert([
+      const { error: insertError } = await adminSupabase.from("results").insert([
         {
           track,
-          position: row.position,
+          finishing_position: row.position,
           driver: row.driverId,
+          qualified_position: qualifyingPosition,
           pole: row.pole,
           fastestlap: row.fastestLap, // use lowercase column name
           racefinished: row.racefinished
@@ -95,12 +111,24 @@ export async function POST(request: Request) {
     const basePoints = row.position <= maxPositions ? pointsMapping[row.position - 1] : 0;
     const bonusPoints = (rules.polegivespoint && row.pole ? 1 : 0) + (rules.fastestlapgivespoint && row.fastestLap ? 1 : 0);
     const totalPoints = basePoints + bonusPoints;
+    
+    console.log(`Points calculation for driver ${row.driverId}:`, {
+      position: row.position,
+      maxPositions,
+      basePoints,
+      pole: row.pole,
+      fastestLap: row.fastestLap,
+      bonusPoints,
+      totalPoints,
+      rules: { polegivespoint: rules.polegivespoint, fastestlapgivespoint: rules.fastestlapgivespoint }
+    });
     // Save the race result
-    const { error: insertError } = await supabase.from("results").insert([
+    const { error: insertError } = await adminSupabase.from("results").insert([
       {
         track,
-        position: row.position,
+        finishing_position: row.position,
         driver: row.driverId,
+        qualified_position: qualifyingPosition,
         pole: row.pole,
         fastestlap: row.fastestLap, // use lowercase column name
         racefinished: row.racefinished
@@ -111,7 +139,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
     // Update the driver's total championship points
-    const { error: updateError } = await supabase
+    const { error: updateError } = await adminSupabase
       .from("drivers")
       .update({ points: currentDriverPoints + totalPoints })
       .eq("id", row.driverId);
@@ -119,11 +147,11 @@ export async function POST(request: Request) {
       console.error("Error updating driver points:", updateError);
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
-    console.log(`Inserted result for driver ${row.driverId}, updated points to ${currentDriverPoints + totalPoints}`);
+    console.log(`✅ Driver ${row.driverId}: ${currentDriverPoints} + ${totalPoints} = ${currentDriverPoints + totalPoints} points`);
 
     // Increment the constructor (team) points for the driver's current team
     if (teamId) {
-      const { data: teamData, error: teamFetchError } = await supabase
+      const { data: teamData, error: teamFetchError } = await adminSupabase
         .from("teams")
         .select("points")
         .eq("id", teamId)
@@ -133,7 +161,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: teamFetchError.message }, { status: 500 });
       }
       const teamPoints = teamData?.points ?? 0;
-      const { error: teamUpdateError } = await supabase
+      const { error: teamUpdateError } = await adminSupabase
         .from("teams")
         .update({ points: teamPoints + totalPoints })
         .eq("id", teamId);
@@ -141,6 +169,7 @@ export async function POST(request: Request) {
         console.error("Error updating team points:", teamUpdateError);
         return NextResponse.json({ error: teamUpdateError.message }, { status: 500 });
       }
+      console.log(`✅ Team ${teamId}: ${teamPoints} + ${totalPoints} = ${teamPoints + totalPoints} points`);
     }
   }
 

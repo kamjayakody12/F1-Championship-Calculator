@@ -204,7 +204,8 @@ export default function ConstructorStandingsPage() {
         
         let points = 0;
         if (result.racefinished) {
-          const basePoints = result.position <= 10 ? racePointsMapping[result.position - 1] : 0;
+          const pos = (result as any).finishing_position ?? result.position;
+          const basePoints = pos <= 10 ? racePointsMapping[(pos || 0) - 1] : 0;
           const bonusPoints = (result.pole ? 1 : 0) + (result.fastestlap ? 1 : 0);
           points = basePoints + bonusPoints;
         }
@@ -213,7 +214,7 @@ export default function ConstructorStandingsPage() {
            track: result.track,
            trackName,
            date: schedule?.date || '',
-           position: result.position,
+           position: (result as any).finishing_position ?? result.position,
            driver: result.driver,
            driverName: driver?.name || 'Unknown',
                        teamId: driver?.team || '', // Use driver's team since results.team doesn't exist yet
@@ -261,20 +262,21 @@ export default function ConstructorStandingsPage() {
          }
 
          // For finished races only - count individual categories:
+         const posForStats = (result as any).finishing_position ?? result.position;
          // Count wins (1st position only)
-         if (result.position === 1) {
+         if (posForStats === 1) {
            stats.wins++;
-           console.log(`WIN recorded for ${stats.teamName}: driver ${result.driverName} position ${result.position}`);
+           console.log(`WIN recorded for ${stats.teamName}: driver ${result.driverName} position ${posForStats}`);
          }
          // Count podiums (2nd and 3rd positions only - not including wins)
-         else if (result.position === 2 || result.position === 3) {
+         else if (posForStats === 2 || posForStats === 3) {
            stats.podiums++;
-           console.log(`PODIUM recorded for ${stats.teamName}: driver ${result.driverName} position ${result.position}`);
+           console.log(`PODIUM recorded for ${stats.teamName}: driver ${result.driverName} position ${posForStats}`);
          }
          // Count points finishes (4th-10th positions only - not including wins or podiums)
-         else if (result.position >= 4 && result.position <= 10) {
+         else if (posForStats >= 4 && posForStats <= 10) {
            stats.pointsFinishes++;
-           console.log(`POINTS FINISH recorded for ${stats.teamName}: driver ${result.driverName} position ${result.position}`);
+           console.log(`POINTS FINISH recorded for ${stats.teamName}: driver ${result.driverName} position ${posForStats}`);
          }
        });
 

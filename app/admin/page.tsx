@@ -35,7 +35,12 @@ interface ResultRow {
   driverId: string;
   pole: boolean;
   fastestLap: boolean;
-  racefinished: boolean; // kept for payload/points, but always true for assigned rows
+  racefinished: boolean;
+}
+
+interface QualifyingRow {
+  position: number;
+  driverId: string;
 }
 
 const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
@@ -49,10 +54,14 @@ export default function AdminDashboardPage() {
   const [selectedTrackType, setSelectedTrackType] = useState<string>("");
   const [selectedTrackValue, setSelectedTrackValue] = useState<string>("");
   const [results, setResults] = useState<ResultRow[]>([]);
+  const [qualifying, setQualifying] = useState<QualifyingRow[]>([]);
   const [rules, setRules] = useState<Rules | null>(null);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const [isUpdatingQualifying, setIsUpdatingQualifying] = useState<boolean>(false);
   const [draggingPos, setDraggingPos] = useState<number | null>(null);
   const [dragOverPos, setDragOverPos] = useState<number | null>(null);
+  const [qualifyingDraggingPos, setQualifyingDraggingPos] = useState<number | null>(null);
+  const [qualifyingDragOverPos, setQualifyingDragOverPos] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/drivers").then((r) => r.json()).then(setDrivers);
@@ -77,6 +86,7 @@ export default function AdminDashboardPage() {
   // Initialize with no selected rows; pool shows all drivers
   useEffect(() => {
     setResults([]);
+    setQualifying([]);
   }, [drivers]);
 
   function handleTrackChange(trackIdAndType: string) {
@@ -91,6 +101,8 @@ export default function AdminDashboardPage() {
     setSelectedTrack(selectedTrackData?.name || "");
     
     if (!selectedTrackId) return;
+    
+    // Load race results
     fetch(`/api/results?track=${encodeURIComponent(selectedTrackId)}`)
       .then((r) => r.json())
       .then((data: any[]) => {
@@ -98,7 +110,7 @@ export default function AdminDashboardPage() {
           setIsUpdating(true);
           setResults(
             data
-              .sort((a, b) => a.position - b.position)
+              .sort((a, b) => a.finishing_position - b.finishing_position)
               .map((row, idx) => ({
                 position: idx + 1,
                 driverId: row.driver,
@@ -110,6 +122,26 @@ export default function AdminDashboardPage() {
         } else {
           setIsUpdating(false);
           setResults([]);
+        }
+      });
+      
+    // Load qualifying results
+    fetch(`/api/qualifying?track=${encodeURIComponent(selectedTrackId)}`)
+      .then((r) => r.json())
+      .then((data: any[]) => {
+        if (data.length) {
+          setIsUpdatingQualifying(true);
+          setQualifying(
+            data
+              .sort((a, b) => a.position - b.position)
+              .map((row, idx) => ({
+                position: idx + 1,
+                driverId: row.driver,
+              }))
+          );
+        } else {
+          setIsUpdatingQualifying(false);
+          setQualifying([]);
         }
       });
   }
@@ -184,6 +216,51 @@ export default function AdminDashboardPage() {
     );
   }
 
+  // Qualifying functions
+  function addDriverToQualifying(driverId: string) {
+    setQualifying((prev) => [
+      ...prev,
+      {
+        position: prev.length + 1,
+        driverId,
+      },
+    ]);
+  }
+
+  function clearQualifyingDriverAtPosition(position: number) {
+    setQualifying((prev) =>
+      prev
+        .filter((q) => q.position !== position)
+        .map((q, idx) => ({ ...q, position: idx + 1 }))
+    );
+  }
+
+  function moveQualifyingRow(sourcePos: number, targetPos: number) {
+    if (sourcePos === targetPos) return;
+    setQualifying((prev) => {
+      const arr = [...prev];
+      const srcIdx = Math.max(0, Math.min(arr.length - 1, sourcePos - 1));
+      const tgtIdx = Math.max(0, Math.min(arr.length - 1, targetPos - 1));
+      const [moved] = arr.splice(srcIdx, 1);
+      arr.splice(tgtIdx, 0, moved);
+      return arr.map((q, idx) => ({ ...q, position: idx + 1 }));
+    });
+  }
+
+
+
+  function copyQualifyingToRace() {
+    // Copy qualifying order to race results, maintaining the qualifying order
+    const raceResults = qualifying.map((q) => ({
+      position: q.position,
+      driverId: q.driverId,
+      pole: q.position === 1, // Pole position goes to P1 in qualifying
+      fastestLap: false,
+      racefinished: true,
+    }));
+    setResults(raceResults);
+  }
+
   async function submitResults() {
     if (!selectedTrackId) {
       toast.error("Please select a track");
@@ -225,6 +302,41 @@ export default function AdminDashboardPage() {
     }
   }
 
+  async function submitQualifying() {
+    if (!selectedTrackId) {
+      toast.error("Please select a track");
+      return;
+    }
+    
+    const qualifyingToSend = qualifying;
+    
+    try {
+      const response = await fetch("/api/qualifying", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          track: selectedTrackId,
+          qualifyingResults: qualifyingToSend 
+        }),
+      });
+      
+      if (!response.ok) {
+        let msg = "Failed to save qualifying results";
+        try {
+          const data = await response.json();
+          if (data?.error) msg = data.error;
+        } catch (_) {}
+        toast.error(msg);
+        return;
+      }
+      
+      toast.success("Qualifying results saved!");
+    } catch (error) {
+      toast.error("Failed to save qualifying results");
+      console.error(error);
+    }
+  }
+
   function computePoints(r: ResultRow) {
     if (!rules) return 0;
     
@@ -246,14 +358,14 @@ export default function AdminDashboardPage() {
   // Drivers that are not yet placed in the results table
   function poolDrivers() {
     return drivers.filter(
-      (d) => !results.some((r) => r.driverId === d.id)
+      (d) => !results.some((r) => r.driverId === d.id) && !qualifying.some((q) => q.driverId === d.id)
     );
   }
 
   return (
     <div className="p-6">
       <h1 className="text-4xl font-bold mb-6 text-gray-900 dark:text-gray-100">
-        Race Results
+        Qualifying & Race Results
       </h1>
 
       <div className="mb-6 max-w-sm">
@@ -285,6 +397,11 @@ export default function AdminDashboardPage() {
                     Updating Existing Results
                   </span>
                 )}
+                {isUpdatingQualifying && (
+                  <span className="ml-2 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 text-xs rounded-md font-medium">
+                    Updating Existing Qualifying
+                  </span>
+                )}
                 {selectedTrackType === 'Sprint' && (
                   <span className="ml-2 text-xs text-blue-600 dark:text-blue-300">
                     (Points: 8-7-6-5-4-3-2-1 for top 8 positions)
@@ -298,8 +415,9 @@ export default function AdminDashboardPage() {
               </p>
             </div>
           )}
-          {/* Driver Pool (red-box area) */}
-          <div className="mb-3 rounded-lg border border-red-500/40 bg-red-500/5 p-3">
+
+          {/* Driver Pool */}
+          <div className="mb-6 rounded-lg border border-red-500/40 bg-red-500/5 p-3">
             <div className="text-xs mb-2 text-muted-foreground">Available Drivers</div>
             <div className="flex flex-wrap gap-2">
               {poolDrivers().map((d) => (
@@ -307,7 +425,7 @@ export default function AdminDashboardPage() {
                   key={d.id}
                   size="sm"
                   variant="outline"
-                  onClick={() => addDriverFromPool(d.id)}
+                  onClick={() => addDriverToQualifying(d.id)}
                 >
                   {d.name}
                 </Button>
@@ -315,126 +433,210 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-            <table className="min-w-full table-auto divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-800">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide sm:px-6 sm:py-3">
-                    Pos
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide sm:px-6 sm:py-3">
-                    Driver
-                  </th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide sm:px-6 sm:py-3">
-                    <div className="flex flex-col items-center">
-                      <span>Race</span>
-                      <span>Finished</span>
-                    </div>
-                  </th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide sm:px-6 sm:py-3">
-                    Pole
-                  </th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide sm:px-6 sm:py-3">
-                    <div className="flex flex-col items-center">
-                      <span>Fastest</span>
-                      <span>Lap</span>
-                    </div>
-                  </th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide sm:px-6 sm:py-3">
-                    Pts
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-600">
-                {results.map((r) => (
-                <tr
-                  key={r.position}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDragOverPos(r.position);
-                  }}
-                  onDrop={(e) => {
-                    const src = Number(e.dataTransfer.getData("text/plain"));
-                    moveRow(src, r.position);
-                    setDraggingPos(null);
-                    setDragOverPos(null);
-                  }}
-                  className={`transition-colors sm:hover:bg-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                    dragOverPos === r.position ? "ring-2 ring-primary/40" : ""
-                  }`}
-                >
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 sm:px-6">
-                      <button
-                        className="inline-flex items-center gap-2 cursor-grab active:cursor-grabbing select-none"
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData("text/plain", String(r.position));
-                          setDraggingPos(r.position);
+          {/* Split View: Qualifying (Left) and Race Results (Right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* Left Side: Qualifying */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Qualifying</h2>
+                <div className="space-x-2">
+                  <Button onClick={submitQualifying} variant="outline">
+                    Save Qualifying
+                  </Button>
+                  <Button onClick={copyQualifyingToRace} variant="secondary">
+                    Copy to Race →
+                  </Button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                <table className="min-w-full table-auto divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                        Pos
+                      </th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                        Driver
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-600">
+                    {qualifying.map((q) => (
+                      <tr
+                        key={q.position}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setQualifyingDragOverPos(q.position);
                         }}
-                        onDragEnd={() => {
+                        onDrop={(e) => {
+                          const src = Number(e.dataTransfer.getData("text/plain"));
+                          moveQualifyingRow(src, q.position);
+                          setQualifyingDraggingPos(null);
+                          setQualifyingDragOverPos(null);
+                        }}
+                        className={`transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                          qualifyingDragOverPos === q.position ? "ring-2 ring-primary/40" : ""
+                        }`}
+                      >
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                          <button
+                            className="inline-flex items-center gap-2 cursor-grab active:cursor-grabbing select-none"
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("text/plain", String(q.position));
+                              setQualifyingDraggingPos(q.position);
+                            }}
+                            onDragEnd={() => {
+                              setQualifyingDraggingPos(null);
+                              setQualifyingDragOverPos(null);
+                            }}
+                            title="Drag to reorder"
+                          >
+                            <GripVertical className="h-4 w-4 opacity-60" />
+                            <span>P{q.position}</span>
+                          </button>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {q.driverId ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => clearQualifyingDriverAtPosition(q.position)}
+                              title="Click to remove this driver"
+                            >
+                              {drivers.find((d) => d.id === q.driverId)?.name || "Driver"}
+                            </Button>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Empty</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Right Side: Race Results */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Race Results</h2>
+                <Button onClick={submitResults}>
+                  {isUpdating ? "Update Results" : "Save Results"}
+                </Button>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                <table className="min-w-full table-auto divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                        Pos
+                      </th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                        Driver
+                      </th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                        Grid
+                      </th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                        Finished
+                      </th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                        FL
+                      </th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                        Pts
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-600">
+                    {results.map((r) => (
+                      <tr
+                        key={r.position}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setDragOverPos(r.position);
+                        }}
+                        onDrop={(e) => {
+                          const src = Number(e.dataTransfer.getData("text/plain"));
+                          moveRow(src, r.position);
                           setDraggingPos(null);
                           setDragOverPos(null);
                         }}
-                        title="Drag to reorder"
-                        aria-label="Drag handle"
+                        className={`transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                          dragOverPos === r.position ? "ring-2 ring-primary/40" : ""
+                        }`}
                       >
-                        <GripVertical className="h-4 w-4 opacity-60" />
-                        <span>P{r.position}</span>
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap sm:px-6">
-                      {r.driverId ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => clearDriverAtPosition(r.position)}
-                          title="Click to remove this driver back to the pool"
-                        >
-                          {drivers.find((d) => d.id === r.driverId)?.name || "Driver"}
-                        </Button>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">Empty</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 sm:px-6">
-                      <div className="flex justify-center">
-                        <Checkbox
-                          checked={!!r.racefinished}
-                          onCheckedChange={() => toggleRaceFinished(r.position)}
-                          aria-label="Race Finished"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 sm:px-6">
-                      <div className="flex justify-center">
-                        <Checkbox
-                          checked={!!r.pole}
-                          onCheckedChange={() => togglePole(r.position)}
-                          aria-label="Pole"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 sm:px-6">
-                      <div className="flex justify-center">
-                        <Checkbox
-                          checked={!!r.fastestLap}
-                          onCheckedChange={() => toggleFastestLap(r.position)}
-                          aria-label="Fastest Lap"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-gray-100 sm:px-6">
-                      {computePoints(r)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-4">
-            <Button onClick={submitResults}>
-              {isUpdating ? "Update Results" : "Save Results"}
-            </Button>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                          <button
+                            className="inline-flex items-center gap-2 cursor-grab active:cursor-grabbing select-none"
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("text/plain", String(r.position));
+                              setDraggingPos(r.position);
+                            }}
+                            onDragEnd={() => {
+                              setDraggingPos(null);
+                              setDragOverPos(null);
+                            }}
+                            title="Drag to reorder"
+                          >
+                            <GripVertical className="h-4 w-4 opacity-60" />
+                            <span>P{r.position}</span>
+                          </button>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {r.driverId ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => clearDriverAtPosition(r.position)}
+                              title="Click to remove this driver"
+                            >
+                              {drivers.find((d) => d.id === r.driverId)?.name || "Driver"}
+                            </Button>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Empty</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center text-sm text-gray-700 dark:text-gray-300">
+                          {r.driverId ? (
+                            (() => {
+                              const qualifyingEntry = qualifying.find(q => q.driverId === r.driverId);
+                              return qualifyingEntry ? `P${qualifyingEntry.position}` : '-';
+                            })()
+                          ) : '-'}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex justify-center">
+                            <Checkbox
+                              checked={!!r.racefinished}
+                              onCheckedChange={() => toggleRaceFinished(r.position)}
+                              aria-label="Race Finished"
+                            />
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex justify-center">
+                            <Checkbox
+                              checked={!!r.fastestLap}
+                              onCheckedChange={() => toggleFastestLap(r.position)}
+                              aria-label="Fastest Lap"
+                            />
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {computePoints(r)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </>
       )}

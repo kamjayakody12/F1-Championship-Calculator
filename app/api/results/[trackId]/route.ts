@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/db";
+import { adminSupabase } from "@/utils/supabase/admin";
 
 const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 const sprintPointsMapping = [8, 7, 6, 5, 4, 3, 2, 1];
@@ -17,7 +17,7 @@ export async function PUT(
   console.log("Event type:", eventType); // Debug log
 
   // First, we need to revert the points from the existing results
-  const { data: existingResults, error: fetchError } = await supabase
+  const { data: existingResults, error: fetchError } = await adminSupabase
     .from("results")
     .select("*")
     .eq("track", track);
@@ -28,7 +28,7 @@ export async function PUT(
   }
 
   // Fetch rules for bonus points
-  const { data: rules, error: rulesError } = await supabase
+  const { data: rules, error: rulesError } = await adminSupabase
     .from('rules')
     .select('polegivespoint, fastestlapgivespoint')
     .eq('id', 1)
@@ -46,14 +46,15 @@ export async function PUT(
     const pointsMapping = eventType === 'Sprint' ? sprintPointsMapping : racePointsMapping;
     const maxPositions = eventType === 'Sprint' ? 8 : 10;
     
-    const basePoints = existingResult.position <= maxPositions ? pointsMapping[existingResult.position - 1] : 0;
+    const priorPos = (existingResult as any).finishing_position ?? existingResult.position;
+    const basePoints = priorPos <= maxPositions ? pointsMapping[(priorPos || 0) - 1] : 0;
     const bonusPoints = (rules.polegivespoint && existingResult.pole ? 1 : 0) + (rules.fastestlapgivespoint && existingResult.fastestlap ? 1 : 0);
     const totalPoints = basePoints + bonusPoints;
     
     // Subtract these points from the driver
-    const { data: driverData, error: driverFetchError } = await supabase
+    const { data: driverData, error: driverFetchError } = await adminSupabase
       .from("drivers")
-      .select("points")
+      .select("points, team")
       .eq("id", existingResult.driver)
       .single();
     
@@ -63,7 +64,7 @@ export async function PUT(
     }
     
     const currentPoints = driverData?.points || 0;
-    const { error: revertError } = await supabase
+    const { error: revertError } = await adminSupabase
       .from("drivers")
       .update({ points: Math.max(0, currentPoints - totalPoints) })
       .eq("id", existingResult.driver);
@@ -74,10 +75,33 @@ export async function PUT(
     }
     
     console.log(`Reverted ${totalPoints} points from driver ${existingResult.driver}`);
+
+    // Also subtract from the driver's team if present
+    const teamIdToRevert: string | null = driverData?.team ?? null;
+    if (teamIdToRevert) {
+      const { data: teamData, error: teamFetchError } = await adminSupabase
+        .from("teams")
+        .select("points")
+        .eq("id", teamIdToRevert)
+        .single();
+      if (teamFetchError) {
+        console.error("Error fetching team points for revert:", teamFetchError);
+        return NextResponse.json({ error: teamFetchError.message }, { status: 500 });
+      }
+      const teamPts = teamData?.points ?? 0;
+      const { error: teamRevertError } = await adminSupabase
+        .from("teams")
+        .update({ points: Math.max(0, teamPts - totalPoints) })
+        .eq("id", teamIdToRevert);
+      if (teamRevertError) {
+        console.error("Error reverting team points:", teamRevertError);
+        return NextResponse.json({ error: teamRevertError.message }, { status: 500 });
+      }
+    }
   }
 
   // Clear existing results for the track
-  const { error: deleteError } = await supabase.from("results").delete().eq("track", track);
+  const { error: deleteError } = await adminSupabase.from("results").delete().eq("track", track);
   if (deleteError) {
     console.error("Error deleting old results:", deleteError);
     return NextResponse.json({ error: deleteError.message }, { status: 500 });
@@ -87,7 +111,7 @@ export async function PUT(
   for (const row of results) {
     if (!row.driverId) continue;
     // Fetch driver's current team and points
-    const { data: driverTeamData, error: driverTeamError } = await supabase
+    const { data: driverTeamData, error: driverTeamError } = await adminSupabase
       .from("drivers")
       .select("team, points")
       .eq("id", row.driverId)
@@ -101,10 +125,10 @@ export async function PUT(
     // If driver didn't finish the race, they get zero points
     if (!row.racefinished) {
       // Save the race result with 0 points
-      const { error: insertError } = await supabase.from("results").insert([
+      const { error: insertError } = await adminSupabase.from("results").insert([
         {
           track,
-          position: row.position,
+          finishing_position: row.position,
           driver: row.driverId,
           pole: row.pole,
           fastestlap: row.fastestLap, // use lowercase column name
@@ -127,12 +151,21 @@ export async function PUT(
     const bonusPoints = (rules.polegivespoint && row.pole ? 1 : 0) + (rules.fastestlapgivespoint && row.fastestLap ? 1 : 0);
     const totalPoints = basePoints + bonusPoints;
     
+    // Fetch qualifying position (optional)
+    const { data: qData } = await adminSupabase
+      .from('qualifying')
+      .select('position')
+      .eq('track', track)
+      .eq('driver', row.driverId)
+      .single();
+
     // Save the race result
-    const { error: insertError } = await supabase.from("results").insert([
+    const { error: insertError } = await adminSupabase.from("results").insert([
       {
         track,
-        position: row.position,
+        finishing_position: row.position,
         driver: row.driverId,
+        qualified_position: qData?.position ?? null,
         pole: row.pole,
         fastestlap: row.fastestLap, // use lowercase column name
         racefinished: row.racefinished
@@ -144,7 +177,7 @@ export async function PUT(
     }
     
     // Update the driver's total championship points
-    const { error: updateError } = await supabase
+    const { error: updateError } = await adminSupabase
       .from("drivers")
       .update({ points: currentDriverPoints + totalPoints })
       .eq("id", row.driverId);
@@ -156,7 +189,7 @@ export async function PUT(
 
     // Increment the constructor (team) points for the current team
     if (teamId) {
-      const { data: teamData, error: teamFetchError } = await supabase
+      const { data: teamData, error: teamFetchError } = await adminSupabase
         .from("teams")
         .select("points")
         .eq("id", teamId)
@@ -166,7 +199,7 @@ export async function PUT(
         return NextResponse.json({ error: teamFetchError.message }, { status: 500 });
       }
       const teamPoints = teamData?.points ?? 0;
-      const { error: teamUpdateError } = await supabase
+      const { error: teamUpdateError } = await adminSupabase
         .from("teams")
         .update({ points: teamPoints + totalPoints })
         .eq("id", teamId);
