@@ -73,14 +73,14 @@ export default async function HomePage() {
         {/* Drivers Table */}
         <section>
           <h2 className="text-2xl font-semibold mb-4">Driver Standings</h2>
-          <div className="bg-white dark:bg-card rounded-2xl shadow border border-gray-200 dark:border-border overflow-x-auto">
+          <div className="bg-card rounded-2xl shadow border border-border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">POS.</TableHead>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">DRIVER</TableHead>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">POINTS</TableHead>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">EVO.</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">POS.</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">DRIVER</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">POINTS</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">EVO.</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -88,8 +88,8 @@ export default async function HomePage() {
                   const prevIdx = prevDriverOrder.indexOf(driver.id);
                   const evo = getEvolution(idx, prevIdx);
                   return (
-                    <TableRow key={driver.id} className="border-b border-gray-100 dark:border-border last:border-0 hover:bg-gray-50 dark:hover:bg-muted/30 transition">
-                      <TableCell className="py-3 px-4 font-semibold text-gray-700 dark:text-gray-100">{idx + 1}</TableCell>
+                    <TableRow key={driver.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition">
+                      <TableCell className="py-3 px-4 font-semibold text-foreground">{idx + 1}</TableCell>
                       <TableCell className="py-3 px-4 flex items-center gap-3">
                         {/* Team logo for driver */}
                         {extractImageUrl(driver.teams?.logo || '') ? (
@@ -99,11 +99,11 @@ export default async function HomePage() {
                             className="w-7 h-7 object-contain flex-shrink-0" 
                           />
                         ) : (
-                          <span className="inline-block w-7 h-7 bg-gray-200 dark:bg-muted rounded-full flex-shrink-0" />
+                          <span className="inline-block w-7 h-7 bg-muted rounded-full flex-shrink-0" />
                         )}
-                        <span className="font-medium text-gray-900 dark:text-gray-100">{driver.name}</span>
+                        <span className="font-medium text-foreground">{driver.name}</span>
                       </TableCell>
-                      <TableCell className="py-3 px-4 font-bold text-gray-900 dark:text-gray-100">{driver.points}</TableCell>
+                      <TableCell className="py-3 px-4 font-bold text-foreground">{driver.points}</TableCell>
                       <TableCell className={`py-3 px-4 font-medium flex items-center gap-1 ${evo.color}`}>{evo.icon}{evo.value}</TableCell>
                     </TableRow>
                   );
@@ -123,14 +123,14 @@ export default async function HomePage() {
         {/* Constructors Table */}
         <section>
           <h2 className="text-2xl font-semibold mb-4">Constructor Standings</h2>
-          <div className="bg-white dark:bg-card rounded-2xl shadow border border-gray-200 dark:border-border overflow-x-auto">
+          <div className="bg-card rounded-2xl shadow border border-border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">POS.</TableHead>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">CONSTRUCTOR</TableHead>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">POINTS</TableHead>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-gray-500">EVO.</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">POS.</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">CONSTRUCTOR</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">POINTS</TableHead>
+                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">EVO.</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -138,8 +138,8 @@ export default async function HomePage() {
                   const prevIdx = prevTeamOrder.indexOf(team.id);
                   const evo = getEvolution(idx, prevIdx);
                   return (
-                    <TableRow key={team.id} className="border-b border-gray-100 dark:border-border last:border-0 hover:bg-gray-50 dark:hover:bg-muted/30 transition">
-                      <TableCell className="py-3 px-4 font-semibold text-gray-700 dark:text-gray-100">{idx + 1}</TableCell>
+                    <TableRow key={team.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition">
+                      <TableCell className="py-3 px-4 font-semibold text-foreground">{idx + 1}</TableCell>
                       <TableCell className="py-3 px-4 flex items-center gap-3">
                         {/* Team logo */}
                         {extractImageUrl(team.logo || '') ? (
@@ -149,11 +149,11 @@ export default async function HomePage() {
                             className="w-7 h-7 object-contain flex-shrink-0" 
                           />
                         ) : (
-                          <span className="inline-block w-7 h-7 bg-gray-200 dark:bg-muted rounded-full flex-shrink-0" />
+                          <span className="inline-block w-7 h-7 bg-muted rounded-full flex-shrink-0" />
                         )}
-                        <span className="font-medium text-gray-900 dark:text-gray-100">{team.name}</span>
+                        <span className="font-medium text-foreground">{team.name}</span>
                       </TableCell>
-                      <TableCell className="py-3 px-4 font-bold text-gray-900 dark:text-gray-100">{team.constructorPoints}</TableCell>
+                      <TableCell className="py-3 px-4 font-bold text-foreground">{team.constructorPoints}</TableCell>
                       <TableCell className={`py-3 px-4 font-medium flex items-center gap-1 ${evo.color}`}>{evo.icon}{evo.value}</TableCell>
                     </TableRow>
                   );
