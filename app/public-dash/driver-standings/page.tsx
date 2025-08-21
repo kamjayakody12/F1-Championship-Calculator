@@ -122,7 +122,8 @@ export default function DriverStandingsPage() {
         { data: results },
         { data: schedules },
         { data: tracksData },
-        { data: selectedTracks }
+        { data: selectedTracks },
+        { data: rules }
       ] = await Promise.all([
         supabase.from('drivers').select('*'),
         supabase.from('teams').select('*'),
@@ -130,9 +131,10 @@ export default function DriverStandingsPage() {
         supabase.from('schedules').select('*'),
         supabase.from('tracks').select('*'),
         supabase.from('selected_tracks').select('*, track(*)'),
+        supabase.from('rules').select('polegivespoint, fastestlapgivespoint').eq('id', 1).single()
       ]);
 
-      if (!driversData || !teamsData || !results || !schedules || !tracksData || !selectedTracks) {
+      if (!driversData || !teamsData || !results || !schedules || !tracksData || !selectedTracks || !rules) {
         throw new Error('Failed to fetch data');
       }
 
@@ -156,7 +158,7 @@ export default function DriverStandingsPage() {
         if (result.racefinished) {
           const pos = result.finishing_position ?? result.position; // support both column names
           const basePoints = pos <= 10 ? racePointsMapping[(pos || 0) - 1] : 0;
-          const bonusPoints = (result.pole ? 1 : 0) + (result.fastestlap ? 1 : 0);
+          const bonusPoints = (rules.polegivespoint && result.pole ? 1 : 0) + (rules.fastestlapgivespoint && result.fastestlap ? 1 : 0);
           points = basePoints + bonusPoints;
         }
         return {
@@ -412,6 +414,7 @@ export default function DriverStandingsPage() {
                       return (
                         <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
                           <p className="font-medium text-sm mb-2">{label}</p>
+                          <p className="text-xs text-muted-foreground mb-2">Points earned at this track</p>
                           <div className="space-y-1">
                             {entries.filter(Boolean).map((entry: any, idx: number) => {
                               const name = entry.dataKey as string;
@@ -420,7 +423,7 @@ export default function DriverStandingsPage() {
                                 <div key={`${name}-${idx}`} className="flex items-center gap-2 text-sm">
                                   <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
                                   <span>{name}</span>
-                                  <span className="ml-auto font-medium">{entry.value}</span>
+                                  <span className="ml-auto font-medium">{entry.value} pts</span>
                                 </div>
                               );
                             })}
@@ -495,22 +498,23 @@ export default function DriverStandingsPage() {
                         const raceData = chartData.find((d) => d.race === label);
                         const raceName = raceData ? raceData.race : label;
                         return (
-                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                            <p className="font-medium text-sm mb-2">{raceName}</p>
-                            <div className="space-y-1">
-                              {payload.map((entry: any, index: number) => {
-                                const driverName = entry.dataKey;
-                                const color = chartConfig[driverName]?.color || entry.color;
-                                return (
-                                  <div key={index} className="flex items-center gap-2 text-sm">
-                                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                                    <span className="font-medium">{driverName}</span>
-                                    <span className="text-muted-foreground">Position {entry.value}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                                  <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                          <p className="font-medium text-sm mb-2">{raceName}</p>
+                          <p className="text-xs text-muted-foreground mb-2">Driver championship position</p>
+                          <div className="space-y-1">
+                            {payload.map((entry: any, index: number) => {
+                              const driverName = entry.dataKey;
+                              const color = chartConfig[driverName]?.color || entry.color;
+                              return (
+                                <div key={index} className="flex items-center gap-2 text-sm">
+                                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                                  <span className="font-medium">{driverName}</span>
+                                  <span className="text-muted-foreground">Position {entry.value}</span>
+                                </div>
+                              );
+                            })}
                           </div>
+                        </div>
                         );
                       }
                       return null;
@@ -576,7 +580,7 @@ export default function DriverStandingsPage() {
                     <TableCell className="py-4 px-6">
                       <div className="flex items-center">
                         {driver.teamLogo ? (
-                          <img src={driver.teamLogo} alt={`${driver.teamName} logo`} className="w-8 h-8 object-contain" />
+                          <img src={driver.teamLogo} alt={`${driver.teamName} logo`} className="w-8 h-8 object-contain bg-black/10 dark:bg-transparent rounded-lg p-1" />
                         ) : (
                           <span className="inline-block w-8 h-8 bg-gray-200 dark:bg-muted rounded-full flex-shrink-0" />
                         )}
@@ -648,6 +652,7 @@ export default function DriverStandingsPage() {
                         return (
                           <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
                             <p className="font-medium text-sm mb-2">{raceName}</p>
+                            <p className="text-xs text-muted-foreground mb-2">Cumulative points after this race</p>
                             <div className="space-y-1">
                               {payload.map((entry: any, index: number) => {
                                 const driverName = entry.dataKey;
@@ -732,10 +737,11 @@ export default function DriverStandingsPage() {
                           <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
                             <div className="flex items-center gap-2 mb-2">
                               {d?.teamLogo && (
-                                <img src={d.teamLogo} alt={`${label} team logo`} className="w-5 h-5 object-contain" />
+                                <img src={d.teamLogo} alt={`${label} team logo`} className="w-5 h-5 object-contain bg-black/10 dark:bg-transparent rounded p-0.5" />
                               )}
                               <p className="font-medium text-sm">{label}</p>
                             </div>
+                            <p className="text-xs text-muted-foreground mb-2">Season statistics</p>
                             <div className="space-y-1">
                               {[
                                 { key: 'pointsFinishes', label: 'Points Finishes (1st-10th, incl. wins & podiums)' },
@@ -927,6 +933,7 @@ export default function DriverStandingsPage() {
                       return (
                         <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
                           <p className="font-medium text-sm mb-2">{label}</p>
+                          <p className="text-xs text-muted-foreground mb-2">Points earned at this track</p>
                           <div className="space-y-1">
                             {entries.filter(Boolean).map((entry: any, idx: number) => {
                               const name = entry.dataKey as string;
@@ -935,7 +942,7 @@ export default function DriverStandingsPage() {
                                 <div key={`${name}-${idx}`} className="flex items-center gap-2 text-sm">
                                   <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
                                   <span>{name}</span>
-                                  <span className="ml-auto font-medium">{entry.value}</span>
+                                  <span className="ml-auto font-medium">{entry.value} pts</span>
                                 </div>
                               );
                             })}

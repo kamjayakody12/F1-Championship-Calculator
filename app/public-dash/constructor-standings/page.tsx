@@ -128,14 +128,16 @@ export default function ConstructorStandingsPage() {
         { data: results },
         { data: schedules },
         { data: tracks },
-        { data: selectedTracks }
+        { data: selectedTracks },
+        { data: rules }
       ] = await Promise.all([
         supabase.from('drivers').select('*'),
         supabase.from('teams').select('*'),
         supabase.from('results').select('*'),
         supabase.from('schedules').select('*'),
         supabase.from('tracks').select('*'),
-                 supabase.from('selected_tracks').select('*, track(*)')
+        supabase.from('selected_tracks').select('*, track(*)'),
+        supabase.from('rules').select('polegivespoint, fastestlapgivespoint').eq('id', 1).single()
       ]);
 
        console.log('Raw data fetched:', {
@@ -148,7 +150,7 @@ export default function ConstructorStandingsPage() {
        });
 
 
-      if (!drivers || !teamsData || !results || !schedules || !tracks || !selectedTracks) {
+      if (!drivers || !teamsData || !results || !schedules || !tracks || !selectedTracks || !rules) {
         throw new Error('Failed to fetch data');
       }
 
@@ -198,7 +200,7 @@ export default function ConstructorStandingsPage() {
             return matches;
           });
         
-        // Calculate points for this result
+        // Calculate points for this result (apply rules for bonus points)
         const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
         const sprintPointsMapping = [8, 7, 6, 5, 4, 3, 2, 1];
         
@@ -206,7 +208,7 @@ export default function ConstructorStandingsPage() {
         if (result.racefinished) {
           const pos = (result as any).finishing_position ?? result.position;
           const basePoints = pos <= 10 ? racePointsMapping[(pos || 0) - 1] : 0;
-          const bonusPoints = (result.pole ? 1 : 0) + (result.fastestlap ? 1 : 0);
+          const bonusPoints = (rules.polegivespoint && result.pole ? 1 : 0) + (rules.fastestlapgivespoint && result.fastestlap ? 1 : 0);
           points = basePoints + bonusPoints;
         }
 
@@ -646,7 +648,7 @@ export default function ConstructorStandingsPage() {
                           <img
                             src={logoUrl}
                             alt={`${team.name} logo`}
-                            className={`${logoSize} object-contain`}
+                            className={`${logoSize} object-contain bg-black/10 dark:bg-transparent rounded-lg p-1`}
                             onError={(e) => {
                               e.currentTarget.style.display = 'none';
                               e.currentTarget.nextElementSibling?.classList.remove('hidden');
@@ -699,7 +701,7 @@ export default function ConstructorStandingsPage() {
                      className="data-[active=true]:bg-muted/50 flex flex-col justify-center items-center gap-1 border-t border-r last:border-r-0 px-2 py-3 text-center sm:px-3 sm:py-4"
                      onClick={() => setActiveTeam(activeTeam === team.name ? "all" : team.name)}
                    >
-                     <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10">
+                     <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-black/10 dark:bg-transparent rounded-lg p-1">
                        {logoUrl ? (
                          <img
                            src={logoUrl}
@@ -831,7 +833,7 @@ export default function ConstructorStandingsPage() {
                                        style={{ backgroundColor: teamColor }}
                                      />
                                      <span className="font-medium">{teamName}</span>
-                                     <span className="text-muted-foreground">{entry.value} points</span>
+                                     <span className="text-muted-foreground">{entry.value} cumulative points</span>
                                    </div>
                                  );
                                })}
@@ -935,8 +937,11 @@ export default function ConstructorStandingsPage() {
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 padding: '2px',
-                                boxSizing: 'border-box'
+                                boxSizing: 'border-box',
+                                backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                                borderRadius: '6px'
                               }}
+                              className="dark:bg-transparent"
                             >
                               <img
                                 src={logoUrl}
@@ -1010,11 +1015,12 @@ export default function ConstructorStandingsPage() {
                                 <img
                                   src={logoUrl}
                                   alt={`${label} logo`}
-                                  className="w-6 h-6 object-contain"
+                                  className="w-6 h-6 object-contain bg-black/10 dark:bg-transparent rounded p-0.5"
                                 />
                               )}
                               <p className="font-medium text-sm">{label}</p>
                             </div>
+                            <p className="text-xs text-muted-foreground mb-2">Season statistics</p>
                             <div className="space-y-1">
                               {statOrder.map((stat, index) => {
                                 const payloadEntry = payload.find((p: any) => p.dataKey === stat.key);
@@ -1185,6 +1191,7 @@ export default function ConstructorStandingsPage() {
                       return (
                         <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
                           <p className="font-medium text-sm mb-2">{raceName}</p>
+                          <p className="text-xs text-muted-foreground mb-2">Constructor championship position</p>
                           <div className="space-y-1">
                             {payload.map((entry: any, index: number) => {
                               const teamName = entry.dataKey;
@@ -1293,6 +1300,7 @@ export default function ConstructorStandingsPage() {
                     return (
                       <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
                         <p className="font-medium text-sm mb-2">{label}</p>
+                        <p className="text-xs text-muted-foreground mb-2">Points earned at this track</p>
                         <div className="space-y-1">
                           {entries.filter(Boolean).map((entry: any, idx: number) => {
                             const teamName = entry.dataKey as string;
@@ -1301,7 +1309,7 @@ export default function ConstructorStandingsPage() {
                               <div key={`${teamName}-${idx}`} className="flex items-center gap-2 text-sm">
                                 <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
                                 <span>{teamName}</span>
-                                <span className="ml-auto font-medium">{entry.value}</span>
+                                <span className="ml-auto font-medium">{entry.value} pts</span>
                               </div>
                             );
                           })}

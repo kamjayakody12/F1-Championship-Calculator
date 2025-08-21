@@ -96,7 +96,7 @@ export default async function HomePage() {
                           <img 
                             src={extractImageUrl(driver.teams.logo)} 
                             alt={`${driver.teams?.name || 'Team'} logo`} 
-                            className="w-7 h-7 object-contain flex-shrink-0" 
+                            className="w-7 h-7 object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1" 
                           />
                         ) : (
                           <span className="inline-block w-7 h-7 bg-muted rounded-full flex-shrink-0" />
@@ -146,7 +146,7 @@ export default async function HomePage() {
                           <img 
                             src={extractImageUrl(team.logo)} 
                             alt={`${team.name} logo`} 
-                            className="w-7 h-7 object-contain flex-shrink-0" 
+                            className="w-7 h-7 object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1" 
                           />
                         ) : (
                           <span className="inline-block w-7 h-7 bg-muted rounded-full flex-shrink-0" />

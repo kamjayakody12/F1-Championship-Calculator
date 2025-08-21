@@ -33,19 +33,14 @@ function addAlphaToHsl(color: string, alpha: number): string {
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState<any[]>([]);
-  const [drivers, setDrivers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [{ data: teamsData }, { data: driversData }] = await Promise.all([
-          supabase.from("teams").select("*"),
-          supabase.from("drivers").select("*")
-        ]);
+        const { data: teamsData } = await supabase.from("teams").select("*");
         
         setTeams(teamsData || []);
-        setDrivers(driversData || []);
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -74,12 +69,9 @@ export default function TeamsPage() {
           const rawCar: string = team.carImage || "";
           const parsedCar = extractImageUrl(rawCar);
           const carImageUrl: string = parsedCar || rawCar;
-          const base = teamColorMap[teamName] || "hsl(0, 0%, 20%)";
-          const overlay = addAlphaToHsl(base, 0.25);
-          const gradient = `linear-gradient(135deg, ${overlay} 0%, rgba(0,0,0,0.0) 55%)`;
-          
-          // Get drivers for this team
-
+                     const base = teamColorMap[teamName] || "hsl(0, 0%, 20%)";
+           const overlay = addAlphaToHsl(base, 0.25);
+           const gradient = `linear-gradient(135deg, ${overlay} 0%, rgba(0,0,0,0.0) 55%)`;
 
           return (
             <div
@@ -126,7 +118,7 @@ export default function TeamsPage() {
                 />
               ) : null}
 
-              
+
 
               {/* Text content */}
               <div className="relative z-[2] p-4 flex flex-col gap-1">
