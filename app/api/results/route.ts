@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
 import { adminSupabase } from "@/utils/supabase/admin";
+import { apiCache, withCacheControlHeaders } from "@/lib/cache";
 
 const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 const sprintPointsMapping = [8, 7, 6, 5, 4, 3, 2, 1];
@@ -12,10 +13,13 @@ export async function GET(request: Request) {
   if (!track) {
     return NextResponse.json({ error: "No track specified" }, { status: 400 });
   }
-  
+  const cacheKey = `results:track:${track}`;
+  const cached = apiCache.get<any[]>(cacheKey);
+  if (cached) return NextResponse.json(cached, withCacheControlHeaders());
   const { data: results, error } = await supabase.from("results").select("*").eq("track", track);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(results);
+  apiCache.set(cacheKey, results || [], 30_000);
+  return NextResponse.json(results, withCacheControlHeaders());
 }
 
 export async function POST(request: Request) {
@@ -175,6 +179,10 @@ export async function POST(request: Request) {
 
   // No team-wide recompute here; team points were adjusted incrementally above
 
+  // Invalidate caches that may be affected by results changes
+  apiCache.delByPrefix('results:');
+  apiCache.del('drivers:list');
+  apiCache.del('teams:list');
   return NextResponse.json({ success: true });
 }
 

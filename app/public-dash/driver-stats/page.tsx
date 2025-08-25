@@ -26,6 +26,7 @@ import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Toolti
 import { SankeyController, Flow } from 'chartjs-chart-sankey';
 import { Chart } from 'react-chartjs-2';
 import { PieSectorDataItem } from "recharts/types/polar/Pie";
+import { IconTrophy, IconMedal, IconTarget } from "@tabler/icons-react";
 
 // Register Chart.js components
 ChartJS.register(
@@ -450,11 +451,17 @@ export default function DriverStatsPage() {
   const pointsPercentage = driverStats ? 
     Math.round((driverStats.pointsFinishes / driverStats.totalRaces) * 100) : 0;
 
+  // Simple responsive helpers for charts
+  const isSmallScreen = typeof window !== 'undefined' && window.innerWidth < 640;
+  const sankeyNodeWidth = isSmallScreen ? 18 : 30;
+  const sankeyPadding = isSmallScreen
+    ? { top: 12, bottom: 12, left: 16, right: 16 }
+    : { top: 20, bottom: 20, left: 24, right: 24 };
+
   return (
-    <div className="p-4 md:p-8">
+    <div className="p-4 md:p-8 space-y-6 md:space-y-8">
       {/* Header with driver selection */}
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Driver Stats</h1>
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Select value={selectedDriver} onValueChange={setSelectedDriver}>
             <SelectTrigger className="w-48">
@@ -471,223 +478,255 @@ export default function DriverStatsPage() {
         </div>
       </div>
 
-             {/* Top stats cards */}
-       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-         <Card>
-           <CardHeader className="pb-2">
-             <CardTitle 
-               className="text-2xl font-bold" 
-               style={{ color: driverStats?.teamColors?.accent || COLORS.wins }}
-             >
-               {driverStats?.wins || 0}
-             </CardTitle>
-             <CardDescription>Wins</CardDescription>
+              {/* Top stats cards */}
+       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 items-stretch">
+         <Card className="min-h-[120px]">
+           <CardHeader className="pb-2 min-h-[88px]">
+             <div className="flex items-start justify-between">
+               <div className="flex-1">
+                 <CardTitle 
+                   className="text-2xl font-bold mb-2" 
+                   style={{ color: driverStats?.teamColors?.accent || COLORS.wins }}
+                 >
+                   {driverStats?.wins || 0}
+                 </CardTitle>
+                 <CardDescription>Wins</CardDescription>
+               </div>
+               <IconTrophy className="h-6 w-6 text-muted-foreground/60" />
+             </div>
            </CardHeader>
          </Card>
-         <Card>
-           <CardHeader className="pb-2">
-             <CardTitle 
-               className="text-2xl font-bold" 
-               style={{ color: driverStats?.teamColors?.primary || COLORS.podiums }}
-             >
-               {driverStats?.podiums || 0}
-             </CardTitle>
-             <CardDescription>Podiums</CardDescription>
+         <Card className="min-h-[120px]">
+           <CardHeader className="pb-2 min-h-[88px]">
+             <div className="flex items-start justify-between">
+               <div className="flex-1">
+                 <CardTitle 
+                   className="text-2xl font-bold mb-2" 
+                   style={{ color: driverStats?.teamColors?.primary || COLORS.podiums }}
+                 >
+                   {driverStats?.podiums || 0}
+                 </CardTitle>
+                 <CardDescription>Podiums</CardDescription>
+               </div>
+               <IconMedal className="h-6 w-6 text-muted-foreground/60" />
+             </div>
            </CardHeader>
          </Card>
-         <Card>
-           <CardHeader className="pb-2">
-             <CardTitle 
-               className="text-2xl font-bold" 
-               style={{ color: driverStats?.teamColors?.secondary || COLORS.pointsFinishes }}
-             >
-               {driverStats?.pointsFinishes || 0}
-             </CardTitle>
-             <CardDescription>Points Finishes</CardDescription>
+         <Card className="min-h-[120px]">
+           <CardHeader className="pb-2 min-h-[88px]">
+             <div className="flex items-start justify-between">
+               <div className="flex-1">
+                 <CardTitle 
+                   className="text-2xl font-bold mb-2" 
+                   style={{ color: driverStats?.teamColors?.secondary || COLORS.pointsFinishes }}
+                 >
+                   {driverStats?.pointsFinishes || 0}
+                 </CardTitle>
+                 <CardDescription>Points Finishes</CardDescription>
+               </div>
+               <IconTarget className="h-6 w-6 text-muted-foreground/60" />
+             </div>
            </CardHeader>
          </Card>
        </div>
 
                {/* Main charts - 3 columns */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
-          {/* Season Performance Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Season Performance</CardTitle>
-              <CardDescription>Distribution of race outcomes</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="w-full h-[350px] relative flex items-center justify-center">
-                <ChartContainer
-                  config={chartConfig}
-                  className="mx-auto aspect-square w-full max-w-[280px]"
-                >
-                  <PieChart>
-                    <ChartTooltip
-                      cursor={false}
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const data = payload[0].payload;
-                          return (
-                            <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                              <p className="font-medium">{data.label}</p>
-                              <p className="text-muted-foreground">{data.value} races</p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <Pie
-                      data={seasonPerformanceData}
-                      dataKey="value"
-                      nameKey="category"
-                      innerRadius={60}
-                      strokeWidth={5}
-                    >
-                      <Label
-                        content={({ viewBox }) => {
-                          if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                            return (
-                              <text
-                                x={viewBox.cx}
-                                y={viewBox.cy}
-                                textAnchor="middle"
-                                dominantBaseline="middle"
-                              >
-                                <tspan
-                                  x={viewBox.cx}
-                                  y={viewBox.cy}
-                                  className="fill-foreground text-3xl font-bold"
-                                >
-                                  {driverStats?.totalRaces || 0}
-                                </tspan>
-                                <tspan
-                                  x={viewBox.cx}
-                                  y={(viewBox.cy || 0) + 24}
-                                  className="fill-muted-foreground"
-                                >
-                                  Total Races
-                                </tspan>
-                              </text>
-                            )
-                          }
-                        }}
-                      />
-                    </Pie>
-                  </PieChart>
-                </ChartContainer>
-              </div>
-            </CardContent>
-          </Card>
+       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 items-stretch">
+         {/* Season Performance Chart */}
+         <Card>
+           <CardHeader>
+             <CardTitle>Season Performance</CardTitle>
+             <CardDescription>Distribution of race outcomes</CardDescription>
+           </CardHeader>
+           <CardContent>
+              <div className="w-full h-[260px] sm:h-[300px] md:h-[350px] relative flex items-center justify-center">
+               <ChartContainer
+                 config={chartConfig}
+                 className="mx-auto aspect-square w-full max-w-[280px]"
+               >
+                 <PieChart>
+                   <ChartTooltip
+                     cursor={false}
+                     content={({ active, payload }) => {
+                       if (active && payload && payload.length) {
+                         const data = payload[0].payload;
+                         return (
+                           <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                             <p className="font-medium">{data.label}</p>
+                             <p className="text-muted-foreground">{data.value} races</p>
+                           </div>
+                         );
+                       }
+                       return null;
+                     }}
+                   />
+                   <Pie
+                     data={seasonPerformanceData}
+                     dataKey="value"
+                     nameKey="category"
+                     innerRadius={60}
+                     strokeWidth={5}
+                   >
+                     <Label
+                       content={({ viewBox }) => {
+                         if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                           return (
+                             <text
+                               x={viewBox.cx}
+                               y={viewBox.cy}
+                               textAnchor="middle"
+                               dominantBaseline="middle"
+                             >
+                               <tspan
+                                 x={viewBox.cx}
+                                 y={viewBox.cy}
+                                 className="fill-foreground text-3xl font-bold"
+                               >
+                                 {driverStats?.totalRaces || 0}
+                               </tspan>
+                               <tspan
+                                 x={viewBox.cx}
+                                 y={(viewBox.cy || 0) + 24}
+                                 className="fill-muted-foreground"
+                               >
+                                 Total Races
+                               </tspan>
+                             </text>
+                           )
+                         }
+                       }}
+                     />
+                   </Pie>
+                 </PieChart>
+               </ChartContainer>
+             </div>
+           </CardContent>
+         </Card>
 
-          {/* Finish Positions in Points Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Finish Positions in Points</CardTitle>
-              <CardDescription>Percentage of finishes in points</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="w-full h-[350px] flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={[
-                        { name: 'In Points', value: driverStats?.pointsFinishes || 0 },
-                        { name: 'Outside Points', value: (driverStats?.totalRaces || 0) - (driverStats?.pointsFinishes || 0) }
-                      ]}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      <Cell fill={driverStats?.teamColors?.primary || COLORS.primary} />
-                      <Cell fill="#e5e7eb" />
-                      <Label
-                        content={({ viewBox }) => {
-                          if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                            return (
-                              <text
-                                x={viewBox.cx}
-                                y={viewBox.cy}
-                                textAnchor="middle"
-                                dominantBaseline="middle"
-                              >
-                                <tspan
-                                  x={viewBox.cx}
-                                  y={viewBox.cy}
-                                  className="fill-foreground text-3xl font-bold"
-                                  style={{ fill: driverStats?.teamColors?.primary || COLORS.primary }}
-                                >
-                                  {pointsPercentage}%
-                                </tspan>
-                                <tspan
-                                  x={viewBox.cx}
-                                  y={(viewBox.cy || 0) + 24}
-                                  className="fill-muted-foreground text-sm"
-                                >
-                                  {driverStats?.pointsFinishes || 0} In Points
-                                </tspan>
-                              </text>
-                            )
-                          }
-                        }}
-                      />
-                    </Pie>
-                    <ChartTooltip
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          return (
-                            <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                              <p className="font-medium">{payload[0].name}</p>
-                              <p className="text-muted-foreground">{payload[0].value} races</p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+         {/* Finish Positions in Points Chart */}
+         <Card>
+           <CardHeader>
+             <CardTitle>Finish Positions in Points</CardTitle>
+             <CardDescription>Percentage of finishes in points</CardDescription>
+           </CardHeader>
+           <CardContent>
+              <div className="w-full h-[260px] sm:h-[300px] md:h-[350px] flex items-center justify-center">
+               <ResponsiveContainer width="100%" height="100%">
+                 <PieChart>
+                   <Pie
+                     data={[
+                       { name: 'In Points', value: driverStats?.pointsFinishes || 0 },
+                       { name: 'Outside Points', value: (driverStats?.totalRaces || 0) - (driverStats?.pointsFinishes || 0) }
+                     ]}
+                     cx="50%"
+                     cy="50%"
+                     innerRadius={60}
+                     outerRadius={100}
+                     paddingAngle={5}
+                     dataKey="value"
+                     strokeWidth={0}
+                   >
+                     <Cell fill={driverStats?.teamColors?.primary || COLORS.primary} />
+                     <Cell fill="#e5e7eb" />
+                     <Label
+                       content={({ viewBox }) => {
+                         if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                           return (
+                             <text
+                               x={viewBox.cx}
+                               y={viewBox.cy}
+                               textAnchor="middle"
+                               dominantBaseline="middle"
+                             >
+                               <tspan
+                                 x={viewBox.cx}
+                                 y={viewBox.cy}
+                                 className="fill-foreground text-3xl font-bold"
+                                 style={{ fill: driverStats?.teamColors?.primary || COLORS.primary }}
+                               >
+                                 {pointsPercentage}%
+                               </tspan>
+                               <tspan
+                                 x={viewBox.cx}
+                                 y={(viewBox.cy || 0) + 24}
+                                 className="fill-muted-foreground text-sm"
+                               >
+                                 {driverStats?.pointsFinishes || 0} In Points
+                               </tspan>
+                             </text>
+                           )
+                         }
+                       }}
+                     />
+                   </Pie>
+                   <ChartTooltip
+                     content={({ active, payload }) => {
+                       if (active && payload && payload.length) {
+                         return (
+                           <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                             <p className="font-medium">{payload[0].name}</p>
+                             <p className="text-muted-foreground">{payload[0].value} races</p>
+                           </div>
+                         );
+                       }
+                       return null;
+                     }}
+                   />
+                 </PieChart>
+               </ResponsiveContainer>
+             </div>
+           </CardContent>
+         </Card>
 
-          {/* Finish Positions Distribution Bar Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Finish Positions Distribution</CardTitle>
-              <CardDescription>Count of finishes for each position</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="w-full h-[350px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={finishPositionsData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="position" />
-                    <YAxis />
-                    <Bar dataKey="count" fill={driverStats?.teamColors?.primary || COLORS.primary} />
-                    <ChartTooltip
-                      content={({ active, payload, label }) => {
-                        if (active && payload && payload.length) {
-                          return (
-                            <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                              <p className="font-medium">{label}</p>
-                              <p className="text-muted-foreground">{payload[0].value} finishes</p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+         {/* Finish Positions Distribution Bar Chart */}
+         <Card>
+           <CardHeader>
+             <CardTitle>Finish Positions Distribution</CardTitle>
+             <CardDescription>Count of finishes for each position</CardDescription>
+           </CardHeader>
+           <CardContent>
+              <div className="w-full h-[260px] sm:h-[300px] md:h-[350px]">
+               <ResponsiveContainer width="100%" height="100%">
+                 <BarChart data={finishPositionsData} margin={{ left: 12, right: 12, top: 0, bottom: 0 }}>
+                   <CartesianGrid strokeDasharray="3 3" />
+                   <XAxis
+                     dataKey="position"
+                     tickMargin={6}
+                     padding={{ left: isSmallScreen ? 6 : 12, right: isSmallScreen ? 6 : 12 }}
+                     tickLine={false}
+                     axisLine={false}
+                   />
+                   <YAxis
+                     hide={false}
+                     mirror={false}
+                     tickMargin={6}
+                     tickLine={false}
+                     axisLine={false}
+                     width={32}
+                     tickCount={5}
+                     domain={[0, 'dataMax']}
+                     allowDecimals={false}
+                   />
+                   <Bar dataKey="count" fill={driverStats?.teamColors?.primary || COLORS.primary} />
+                   <ChartTooltip
+                     content={({ active, payload, label }) => {
+                       if (active && payload && payload.length) {
+                         return (
+                           <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                             <p className="font-medium">{label}</p>
+                             <p className="text-muted-foreground">{payload[0].value} finishes</p>
+                           </div>
+                         );
+                       }
+                       return null;
+                     }}
+                   />
+                 </BarChart>
+               </ResponsiveContainer>
+             </div>
+           </CardContent>
+         </Card>
+       </div>
 
         
 
@@ -699,7 +738,7 @@ export default function DriverStatsPage() {
          </CardHeader>
          <CardContent>
            {driverStats?.startToFinishFlow?.nodes && driverStats.startToFinishFlow.nodes.length > 0 ? (
-             <div className="w-full h-[600px] dark:bg-red-950/10 bg-white rounded-lg p-4 border dark:border-red-900/20 border-gray-200">
+             <div className="w-full h-[520px] sm:h-[560px] md:h-[600px] bg-transparent rounded-lg px-4 sm:px-6 py-3 sm:py-4">
                <Chart
                  key={themeKey}
                  type="sankey"
@@ -734,16 +773,13 @@ export default function DriverStatsPage() {
                      },
                      color: (driverStats?.teamColors?.secondary || COLORS.secondary),
                      borderWidth: 0,
-                     nodeWidth: 30
+                     nodeWidth: sankeyNodeWidth
                    }]
                  }}
                  options={{
                    responsive: true,
                    maintainAspectRatio: false,
-                   backgroundColor: (() => {
-                     const isDark = document.documentElement.classList.contains('dark');
-                     return isDark ? 'rgba(127, 29, 29, 0.1)' : '#f9fafb';
-                   })(),
+                   backgroundColor: 'transparent',
                    scales: {
                      x: {
                        display: false
@@ -800,12 +836,7 @@ export default function DriverStatsPage() {
                      }
                    },
                    layout: {
-                     padding: {
-                       top: 20,
-                       bottom: 20,
-                       left: 80,
-                       right: 80
-                     }
+                     padding: sankeyPadding
                    }
                  }}
                />
@@ -818,6 +849,6 @@ export default function DriverStatsPage() {
            )}
          </CardContent>
        </Card>
-    </div>
-  );
-}
+     </div>
+   );
+ }

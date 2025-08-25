@@ -1,12 +1,14 @@
 // app/api/schedules/route.ts
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
+import { apiCache, withCacheControlHeaders } from "@/lib/cache";
 
 export async function GET() {
   try {
     console.log('GET /api/schedules - fetching data...');
-    
-    // First, let's check what columns exist in the schedules table
+    const cacheKey = 'schedules:list';
+    const cached = apiCache.get<any[]>(cacheKey);
+    if (cached) return NextResponse.json(cached, withCacheControlHeaders());
     const { data: schedules, error } = await supabase
       .from('schedules')
       .select('*');
@@ -18,8 +20,8 @@ export async function GET() {
     
     console.log('GET /api/schedules - raw data:', schedules);
     
-    // For now, return the raw data to see the structure
-    return NextResponse.json(schedules || []);
+    apiCache.set(cacheKey, schedules || [], 60_000);
+    return NextResponse.json(schedules || [], withCacheControlHeaders());
   } catch (error) {
     console.error('GET /api/schedules - unexpected error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -44,6 +46,7 @@ export async function POST(request: Request) {
     }
     
          console.log('POST /api/schedules - success:', data);
+     apiCache.del('schedules:list');
      return NextResponse.json({
        track: data.track,
        date: data.date?.slice(0, 10),

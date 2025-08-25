@@ -127,10 +127,10 @@ export default async function HomePage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">POS.</TableHead>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">CONSTRUCTOR</TableHead>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">POINTS</TableHead>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">EVO.</TableHead>
+                  <TableHead className="py-4 px-6 text-xs font-semibold text-muted-foreground">POS.</TableHead>
+                  <TableHead className="py-4 px-6 text-xs font-semibold text-muted-foreground">CONSTRUCTOR</TableHead>
+                  <TableHead className="py-4 px-6 text-xs font-semibold text-muted-foreground">POINTS</TableHead>
+                  <TableHead className="py-4 px-6 text-xs font-semibold text-muted-foreground">EVO.</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -139,8 +139,8 @@ export default async function HomePage() {
                   const evo = getEvolution(idx, prevIdx);
                   return (
                     <TableRow key={team.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition">
-                      <TableCell className="py-3 px-4 font-semibold text-foreground">{idx + 1}</TableCell>
-                      <TableCell className="py-3 px-4 flex items-center gap-3">
+                      <TableCell className="py-4 px-6 font-semibold text-foreground">{idx + 1}</TableCell>
+                      <TableCell className="py-4 px-6 flex items-center gap-3">
                         {/* Team logo */}
                         {extractImageUrl(team.logo || '') ? (
                           <img 
@@ -153,8 +153,8 @@ export default async function HomePage() {
                         )}
                         <span className="font-medium text-foreground">{team.name}</span>
                       </TableCell>
-                      <TableCell className="py-3 px-4 font-bold text-foreground">{team.constructorPoints}</TableCell>
-                      <TableCell className={`py-3 px-4 font-medium flex items-center gap-1 ${evo.color}`}>{evo.icon}{evo.value}</TableCell>
+                      <TableCell className="py-4 px-6 font-bold text-foreground">{team.constructorPoints}</TableCell>
+                      <TableCell className={`py-4 px-6 font-medium flex items-center gap-1 ${evo.color}`}>{evo.icon}{evo.value}</TableCell>
                     </TableRow>
                   );
                 })}

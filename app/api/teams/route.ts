@@ -1,17 +1,23 @@
 // app/api/teams/route.ts
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
+import { apiCache, withCacheControlHeaders } from "@/lib/cache";
 
 export async function GET() {
+  const cacheKey = `teams:list`;
+  const cached = apiCache.get<any[]>(cacheKey);
+  if (cached) return NextResponse.json(cached, withCacheControlHeaders());
   const { data: teams, error } = await supabase.from('teams').select('*');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(teams);
+  apiCache.set(cacheKey, teams || [], 60_000);
+  return NextResponse.json(teams, withCacheControlHeaders());
 }
 
 export async function POST(request: Request) {
   const { name } = await request.json();
   const { data, error } = await supabase.from('teams').insert([{ name }]).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  apiCache.del('teams:list');
   return NextResponse.json(data);
 }
 
@@ -19,6 +25,7 @@ export async function PUT(request: Request) {
   const { teamId, name } = await request.json();
   const { data, error } = await supabase.from('teams').update({ name }).eq('id', teamId).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  apiCache.del('teams:list');
   return NextResponse.json(data);
 }
 
@@ -43,5 +50,6 @@ export async function DELETE(request: Request) {
     console.error("Supabase delete error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  apiCache.del('teams:list');
   return NextResponse.json({ success: true });
 }

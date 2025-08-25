@@ -1,20 +1,19 @@
 // app/api/selected-tracks/route.ts
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
+import { apiCache, withCacheControlHeaders } from "@/lib/cache";
 
 export async function GET() {
   // Join selected_tracks with tracks and include the type field
+  const cached = apiCache.get<any[]>(`selected-tracks:list`);
+  if (cached) return NextResponse.json(cached, withCacheControlHeaders());
   const { data: sel, error } = await supabase
     .from('selected_tracks')
     .select('id, track, type, tracks(*)');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(
-    (sel || []).map((s: any) => ({ 
-      id: s.id, 
-      track: s.tracks,
-      type: s.type 
-    }))
-  );
+  const payload = (sel || []).map((s: any) => ({ id: s.id, track: s.tracks, type: s.type }));
+  apiCache.set('selected-tracks:list', payload, 60_000);
+  return NextResponse.json(payload, withCacheControlHeaders());
 }
 
 export async function POST(request: Request) {
@@ -42,6 +41,7 @@ export async function POST(request: Request) {
     
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   
+  apiCache.del('selected-tracks:list');
   return NextResponse.json({ 
     id: newSel.id, 
     track: newSel.tracks,
@@ -67,6 +67,7 @@ export async function PUT(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!updatedTrack) return NextResponse.json({ error: "Selected track not found" }, { status: 404 });
 
+  apiCache.del('selected-tracks:list');
   return NextResponse.json({ 
     id: updatedTrack.id, 
     track: updatedTrack.tracks,
@@ -88,5 +89,6 @@ export async function DELETE(request: Request) {
     
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   
+  apiCache.del('selected-tracks:list');
   return NextResponse.json({ success: true });
 }

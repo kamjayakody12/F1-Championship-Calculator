@@ -600,18 +600,6 @@ export default function ConstructorStandingsPage() {
 
   return (
     <div className="p-4 md:p-8">
-      <header className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <Link href="/">
-            <Button variant="ghost" size="sm" className="flex items-center gap-2">
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </Button>
-          </Link>
-          <h1 className="text-3xl font-bold">Constructor Championship Standings</h1>
-        </div>
-      </header>
-
       {/* Dashboard Layout: Left table, right charts (2x2) */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         {/* Left: Constructor Standings Table (wider) */}

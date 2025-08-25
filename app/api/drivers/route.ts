@@ -1,6 +1,7 @@
 // app/api/drivers/route.ts
 import { NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "@/utils/supabase/server";
+import { apiCache, withCacheControlHeaders } from "@/lib/cache";
 
 // Function to ensure there can be max 3 drivers in a team
 async function checkTeamDriverLimit(supabase: any, teamId: string, excludeDriverId?: string) {
@@ -21,10 +22,13 @@ async function checkTeamDriverLimit(supabase: any, teamId: string, excludeDriver
 }
 
 export async function GET() {
+  const cached = apiCache.get<any[]>(`drivers:list`);
+  if (cached) return NextResponse.json(cached, withCacheControlHeaders());
   const supabase = await createServerSupabase();
   const { data: drivers, error } = await supabase.from('drivers').select('*');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(drivers);
+  apiCache.set(`drivers:list`, drivers || [], 60_000);
+  return NextResponse.json(drivers, withCacheControlHeaders());
 }
 
 export async function POST(request: Request) {
@@ -44,6 +48,7 @@ export async function POST(request: Request) {
     },
   ]).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  apiCache.del('drivers:list');
   return NextResponse.json(data);
 }
 
@@ -70,6 +75,7 @@ export async function PUT(request: Request) {
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  apiCache.del('drivers:list');
   return NextResponse.json(data);
 }
 
@@ -78,5 +84,6 @@ export async function DELETE(request: Request) {
   const supabase = await createServerSupabase();
   const { error } = await supabase.from('drivers').delete().eq('id', driverId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  apiCache.del('drivers:list');
   return NextResponse.json({ success: true });
 }
