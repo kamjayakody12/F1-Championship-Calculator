@@ -24,15 +24,15 @@ export default function DataTable<TData = any>({
   });
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
-      <table className="min-w-full table-auto divide-y divide-gray-200 dark:divide-gray-700">
-        <thead className="bg-gray-50 dark:bg-gray-800">
+    <div className="overflow-x-auto rounded-lg border border-border bg-card">
+      <table className="min-w-full table-auto divide-y divide-border">
+        <thead className="bg-muted/50">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
                 <th
                   key={header.id}
-                  className={`px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide sm:px-6 sm:py-3 dark:text-gray-400 ${
+                  className={`px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide sm:px-6 ${
                     header.column.columnDef.meta?.className ?? ""
                   }`}
                 >
@@ -47,16 +47,16 @@ export default function DataTable<TData = any>({
             </tr>
           ))}
         </thead>
-        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+        <tbody className="divide-y divide-border bg-card">
           {table.getRowModel().rows.map((row) => (
             <tr
               key={row.id}
-              className="hover:bg-gray-50 transition-colors sm:hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="hover:bg-muted/50 transition-colors"
             >
               {row.getVisibleCells().map((cell) => (
                 <td
                   key={cell.id}
-                  className={`px-4 py-3 whitespace-nowrap text-sm text-gray-900 sm:px-6 dark:text-gray-100 ${
+                  className={`px-4 py-3 whitespace-nowrap text-sm text-foreground sm:px-6 ${
                     cell.column.columnDef.meta?.className ?? ""
                   }`}
                 >

@@ -1,12 +1,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import DataTable from '@/components/data-table';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/db';
 import { Result } from '@/models/Result';
+import { IconTrophy, IconFlag, IconClock } from '@tabler/icons-react';
+
+// Helper function to extract image URL from HTML string
+function extractImageUrl(htmlString: string): string {
+  if (!htmlString) return '';
+  const match = htmlString.match(/src="([^"]+)"/);
+  return match ? match[1] : '';
+}
 
 interface Track {
   id: string;
@@ -14,16 +23,24 @@ interface Track {
   type: 'Race' | 'Sprint';
 }
 
+interface TrackData {
+  id: string;
+  name: string;
+  location?: string;
+  country?: string;
+}
+
 interface Driver {
   id: string;
   name: string;
-  number: number;
+  driver_number: number | null;
   team: string;
 }
 
 interface Team {
   id: string;
   name: string;
+  logo: string;
   color: string;
 }
 
@@ -37,84 +54,83 @@ interface ExtendedResult extends Result {
   laps: number;
   fastestLapTime?: string;
   fastestLapNumber?: number;
+  position: number; // Alias for finishing_position for easier access
+  qualifyingTime?: string;
+  q2Time?: string;
+  q3Time?: string;
 }
 
 export default function ResultsPage() {
   const [selectedTrack, setSelectedTrack] = useState<string>('');
   const [tracks, setTracks] = useState<Track[]>([]);
   const [results, setResults] = useState<ExtendedResult[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [qualifyingResults, setQualifyingResults] = useState<ExtendedResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [tracksLoading, setTracksLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'race' | 'qualifying'>('race');
 
-  // Use dummy tracks data
+  // Fetch tracks from selected-tracks API
   useEffect(() => {
-    setTracks(dummyTracks);
+    const fetchTracks = async () => {
+      try {
+        setTracksLoading(true);
+        const response = await fetch('/api/selected-tracks');
+        if (response.ok) {
+          const tracksData = await response.json();
+          console.log('Raw tracks data:', tracksData); // Debug log
+          
+          // Check if we have valid data
+          if (tracksData && tracksData.length > 0) {
+            // Transform the data to handle the nested track structure
+            const transformedTracks: Track[] = tracksData.map((item: any) => {
+              console.log('Processing item:', item); // Debug each item
+              return {
+                id: item.id,
+                name: item.track?.name || 'Unknown Track',
+                type: item.type || 'Race'
+              };
+            });
+            console.log('Transformed tracks:', transformedTracks); // Debug log
+            setTracks(transformedTracks);
+          } else {
+            console.log('No tracks data, trying direct tracks API');
+            // Fallback to direct tracks API
+            const tracksResponse = await fetch('/api/tracks');
+            if (tracksResponse.ok) {
+              const directTracks = await tracksResponse.json();
+              const transformedDirectTracks: Track[] = directTracks.map((track: any) => ({
+                id: track.id,
+                name: track.name,
+                type: 'Race' // Default to Race for direct tracks
+              }));
+              setTracks(transformedDirectTracks);
+            } 
+          }
+        } else {
+          console.error('Failed to fetch selected tracks, trying direct tracks API');
+          // Fallback to direct tracks API
+          const tracksResponse = await fetch('/api/tracks');
+          if (tracksResponse.ok) {
+            const directTracks = await tracksResponse.json();
+            const transformedDirectTracks: Track[] = directTracks.map((track: any) => ({
+              id: track.id,
+              name: track.name,
+              type: 'Race' // Default to Race for direct tracks
+            }));
+            setTracks(transformedDirectTracks);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching tracks:', error);
+      } finally {
+        setTracksLoading(false);
+      }
+    };
+
+    fetchTracks();
   }, []);
 
-  // Dummy data for testing
-  const dummyTeams = [
-    { id: '1', name: 'Red Bull Racing', color: '#3671C6' },
-    { id: '2', name: 'Mercedes', color: '#6CD3BF' },
-    { id: '3', name: 'Ferrari', color: '#F91536' },
-    { id: '4', name: 'McLaren', color: '#F58020' },
-    { id: '5', name: 'Aston Martin', color: '#358C75' },
-    { id: '6', name: 'Alpine', color: '#2293D1' },
-    { id: '7', name: 'Williams', color: '#37BEDD' },
-    { id: '8', name: 'AlphaTauri', color: '#5E8FAA' },
-    { id: '9', name: 'Alfa Romeo', color: '#C92D4B' },
-    { id: '10', name: 'Haas F1 Team', color: '#B6BABD' }
-  ];
-
-  const dummyDrivers = [
-    { id: '1', name: 'Max Verstappen', number: 1, team: '1' },
-    { id: '2', name: 'Sergio Perez', number: 11, team: '1' },
-    { id: '3', name: 'Lewis Hamilton', number: 44, team: '2' },
-    { id: '4', name: 'George Russell', number: 63, team: '2' },
-    { id: '5', name: 'Charles Leclerc', number: 16, team: '3' },
-    { id: '6', name: 'Carlos Sainz', number: 55, team: '3' },
-    { id: '7', name: 'Lando Norris', number: 4, team: '4' },
-    { id: '8', name: 'Oscar Piastri', number: 81, team: '4' },
-    { id: '9', name: 'Fernando Alonso', number: 14, team: '5' },
-    { id: '10', name: 'Lance Stroll', number: 18, team: '5' },
-    { id: '11', name: 'Pierre Gasly', number: 10, team: '6' },
-    { id: '12', name: 'Esteban Ocon', number: 31, team: '6' },
-    { id: '13', name: 'Alex Albon', number: 23, team: '7' },
-    { id: '14', name: 'Logan Sargeant', number: 2, team: '7' },
-    { id: '15', name: 'Yuki Tsunoda', number: 22, team: '8' },
-    { id: '16', name: 'Daniel Ricciardo', number: 3, team: '8' },
-    { id: '17', name: 'Valtteri Bottas', number: 77, team: '9' },
-    { id: '18', name: 'Zhou Guanyu', number: 24, team: '9' },
-    { id: '19', name: 'Kevin Magnussen', number: 20, team: '10' },
-    { id: '20', name: 'Nico Hulkenberg', number: 27, team: '10' }
-  ];
-
-  const dummyTracks: Track[] = [
-    { id: '1', name: 'Bahrain Grand Prix', type: 'Race' },
-    { id: '2', name: 'Saudi Arabian Grand Prix', type: 'Race' },
-    { id: '3', name: 'Australian Grand Prix', type: 'Race' },
-    { id: '4', name: 'Japanese Grand Prix', type: 'Race' },
-    { id: '5', name: 'Chinese Grand Prix', type: 'Race' },
-    { id: '6', name: 'Miami Grand Prix', type: 'Race' },
-    { id: '7', name: 'Emilia Romagna Grand Prix', type: 'Race' },
-    { id: '8', name: 'Monaco Grand Prix', type: 'Race' },
-    { id: '9', name: 'Canadian Grand Prix', type: 'Race' },
-    { id: '10', name: 'Spanish Grand Prix', type: 'Race' }
-  ];
-
-  // Generate random time gaps
-  const generateTimeGap = (position: number): string => {
-    if (position === 1) return '';
-    const seconds = (Math.random() * 30 + position * 2).toFixed(3);
-    return `+${seconds}s`;
-  };
-
-  // Generate random intervals
-  const generateInterval = (position: number, prevGap: string): string => {
-    if (position === 1) return '';
-    const prevSeconds = parseFloat(prevGap.replace('+', ''));
-    const intervalSeconds = (Math.random() * 5).toFixed(3);
-    return `+${intervalSeconds}s`;
-  };
 
   // Fetch results when track is selected
   useEffect(() => {
@@ -125,39 +141,25 @@ export default function ResultsPage() {
       setError(null);
       
       try {
-        // For testing, we'll use dummy data instead of fetching from Supabase
-        const shuffledDrivers = [...dummyDrivers].sort(() => Math.random() - 0.5);
-        const dummyResults: ExtendedResult[] = shuffledDrivers.map((driver, index) => {
-          const position = index + 1;
-          const gap = generateTimeGap(position);
-          const interval = generateInterval(position, gap);
-          const team = dummyTeams.find(t => t.id === driver.team)!;
-          const racefinished = Math.random() > 0.1; // 10% chance of DNF
-          const isFastestLap = position === Math.floor(Math.random() * 5) + 1; // Random driver in top 5 gets fastest lap
-          const fastestLapTime = isFastestLap ? '1:19.409' : undefined;
-          const fastestLapNumber = isFastestLap ? 45 : undefined;
-          
-          return {
-            id: `result-${position}`,
-            track: selectedTrack,
-            position,
-            driver: driver.id,
-            pole: position === 1,
-            fastestlap: isFastestLap,
-            racefinished,
-            driverDetails: driver,
-            teamDetails: team,
-            time: racefinished ? (position === 1 ? '1:35:21.231' : '') : 'DNF',
-            gap: racefinished ? gap : '',
-            interval: racefinished ? interval : '',
-            points: calculatePoints(position, position === 1, isFastestLap, 'Race'),
-            laps: racefinished ? 70 : Math.floor(Math.random() * 50) + 10,
-            fastestLapTime,
-            fastestLapNumber
-          };
-        });
+        // Fetch race results
+        const raceResponse = await fetch(`/api/results/with-details?track=${selectedTrack}`);
+        if (raceResponse.ok) {
+          const raceData = await raceResponse.json();
+          setResults(raceData);
+        } else {
+          const errorData = await raceResponse.json();
+          setError(errorData.error || 'Failed to load race results');
+        }
 
-        setResults(dummyResults);
+        // Fetch qualifying results
+        const qualifyingResponse = await fetch(`/api/qualifying?track=${selectedTrack}`);
+        if (qualifyingResponse.ok) {
+          const qualifyingData = await qualifyingResponse.json();
+          setQualifyingResults(qualifyingData);
+        } else {
+          console.log('No qualifying data available');
+          setQualifyingResults([]);
+        }
       } catch (err) {
         setError('Failed to load results');
         console.error(err);
@@ -185,66 +187,190 @@ export default function ResultsPage() {
     
     return basePoints + bonusPoints;
   };
+  // Reusable function for driver number styling
+  const getDriverNumberStyles = (teamColor: string) => {
+    const lightModeStyles: { [key: string]: { text: string, background: string } } = {
+      '#002661': { text: '#1e40af', background: '#eff4fe' }, // Blue
+      '#002d33': { text: '#0f766e', background: '#e2f8fb' }, // Teal
+      '#461a08': { text: '#ea580c', background: '#fff3e9' }, // Orange
+      '#520810': { text: '#dc2626', background: '#fffaee' }, // Red
+      '#002f14': { text: '#16a34a', background: '#eaf6ed' }, // Green
+      '#1b2d00': { text: '#65a30d', background: '#eef6e3' }, // Lime
+      '#3a1659': { text: '#9333ea', background: '#f9f1ff' }, // Purple
+      '#282828': { text: '#6b7280', background: '#f3f3f3' }, // Gray
+      '#50003F': { text: '#c026d3', background: '#feeff9' }, // Magenta
+    };
 
-  const columns = [
+    const darkModeStyles: { [key: string]: { text: string, background: string } } = {
+      '#002661': { text: '#dbeafe', background: '#1e40af' }, // Blue
+      '#002d33': { text: '#ccfbf1', background: '#0f766e' }, // Teal
+      '#461a08': { text: '#fed7aa', background: '#ea580c' }, // Orange
+      '#520810': { text: '#fecaca', background: '#dc2626' }, // Red
+      '#002f14': { text: '#bbf7d0', background: '#16a34a' }, // Green
+      '#1b2d00': { text: '#d9f99d', background: '#65a30d' }, // Lime
+      '#3a1659': { text: '#e9d5ff', background: '#9333ea' }, // Purple
+      '#282828': { text: '#f3f4f6', background: '#6b7280' }, // Gray
+      '#50003F': { text: '#fce7f3', background: '#c026d3' }, // Magenta
+    };
+
+    const light = lightModeStyles[teamColor] || { text: '#6b7280', background: '#f3f3f3' };
+    const dark = darkModeStyles[teamColor] || { text: '#f3f4f6', background: '#6b7280' };
+
+    return { light, dark };
+  };
+  // Race results columns
+  const raceColumns = [
     {
       accessorKey: 'position',
       header: 'POS',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => <div className="font-mono">{row.original.position}</div>
+      cell: ({ row }: { row: { original: ExtendedResult } }) => (
+        <div className="font-mono font-bold text-lg">{row.original.position}</div>
+      )
     },
     {
-      accessorKey: 'driverDetails.number',
+      accessorKey: 'driverDetails.driver_number',
       header: 'NO',
       cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <div className="font-mono" style={{ color: row.original.teamDetails?.color }}>
-          {row.original.driverDetails.number}
-        </div>
+        <DriverNumberCell 
+          driverNumber={row.original.driverDetails.driver_number} 
+          teamColor={row.original.teamDetails?.color || '#282828'} 
+        />
       )
     },
     {
       accessorKey: 'driverDetails.name',
       header: 'DRIVER',
       cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <div className="flex items-center gap-2">
-          <span>{row.original.driverDetails.name}</span>
-          {row.original.pole && <Badge variant="outline">POLE</Badge>}
-          {row.original.fastestlap && <Badge variant="outline">FL</Badge>}
-        </div>
+        <div className="font-semibold">{row.original.driverDetails.name}</div>
       )
     },
     {
       accessorKey: 'teamDetails.name',
       header: 'TEAM',
       cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <div style={{ color: row.original.teamDetails?.color }}>
-          {row.original.teamDetails?.name}
+        <div className="flex items-center gap-3">
+          {(() => {
+            const logoUrl = extractImageUrl(row.original.teamDetails?.logo || '');
+            return logoUrl ? (
+              <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-md flex items-center justify-center p-1">
+                <img
+                  src={logoUrl}
+                  alt={`${row.original.teamDetails?.name} logo`}
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-md flex items-center justify-center">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                  {row.original.teamDetails?.name?.charAt(0) || '?'}
+                </span>
+              </div>
+            );
+          })()}
+          <span className="text-sm font-medium">
+            {row.original.teamDetails?.name}
+          </span>
         </div>
       )
     },
     {
       accessorKey: 'time',
       header: 'TIME',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => <div className="font-mono">{row.original.time || 'DNF'}</div>
+      cell: ({ row }: { row: { original: ExtendedResult } }) => (
+        <div className="font-mono text-sm">
+          {row.original.racefinished ? (row.original.position === 1 ? row.original.time : '-') : 'DNF'}
+        </div>
+      )
     },
     {
       accessorKey: 'gap',
       header: 'GAP',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => <div className="font-mono">{row.original.gap || '-'}</div>
-    },
-    {
-      accessorKey: 'interval',
-      header: 'INTERVAL',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => <div className="font-mono">{row.original.interval || '-'}</div>
+      cell: ({ row }: { row: { original: ExtendedResult } }) => (
+        <div className="font-mono text-sm text-muted-foreground">
+          {row.original.racefinished && row.original.position > 1 ? row.original.gap : '-'}
+        </div>
+      )
     },
     {
       accessorKey: 'points',
       header: 'PTS',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => <div className="font-mono">{row.original.points}</div>
+      cell: ({ row }: { row: { original: ExtendedResult } }) => (
+        <div className="font-mono font-bold text-lg">
+          {row.original.points}
+        </div>
+      )
+    }
+  ];
+
+  // Qualifying results columns
+  const qualifyingColumns = [
+    {
+      accessorKey: 'position',
+      header: 'POS',
+      cell: ({ row }: { row: { original: ExtendedResult } }) => (
+        <div className="font-mono font-bold text-lg">{row.original.position}</div>
+      )
     },
     {
-      accessorKey: 'laps',
-      header: 'LAPS',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => <div className="font-mono">{row.original.laps}</div>
+      accessorKey: 'driverDetails.driver_number',
+      header: 'NO',
+      cell: ({ row }: { row: { original: ExtendedResult } }) => (
+        <DriverNumberCell 
+          driverNumber={row.original.driverDetails.driver_number} 
+          teamColor={row.original.teamDetails?.color || '#282828'} 
+        />
+      )
+    },
+    {
+      accessorKey: 'driverDetails.name',
+      header: 'DRIVER',
+      cell: ({ row }: { row: { original: ExtendedResult } }) => (
+        <div className="font-semibold">{row.original.driverDetails.name}</div>
+      )
+    },
+    {
+      accessorKey: 'teamDetails.name',
+      header: 'TEAM',
+      cell: ({ row }: { row: { original: ExtendedResult } }) => (
+        <div className="flex items-center gap-3">
+          {(() => {
+            const logoUrl = extractImageUrl(row.original.teamDetails?.logo || '');
+            return logoUrl ? (
+              <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-md flex items-center justify-center p-1">
+                <img
+                  src={logoUrl}
+                  alt={`${row.original.teamDetails?.name} logo`}
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-md flex items-center justify-center">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                  {row.original.teamDetails?.name?.charAt(0) || '?'}
+                </span>
+              </div>
+            );
+          })()}
+          <span className="text-sm font-medium">
+            {row.original.teamDetails?.name}
+          </span>
+        </div>
+      )
+    },
+    {
+      accessorKey: 'qualifyingTime',
+      header: 'TIME',
+      cell: ({ row }: { row: { original: ExtendedResult } }) => (
+        <div className="font-mono text-sm">
+          {row.original.qualifyingTime || '-'}
+        </div>
+      )
     }
   ];
 
@@ -253,23 +379,70 @@ export default function ResultsPage() {
     return time.includes(':') ? time : `${time}s`;
   };
 
+  // Reusable driver number cell component
+  const DriverNumberCell = ({ driverNumber, teamColor }: { driverNumber: number | string, teamColor: string }) => {
+    const { light, dark } = getDriverNumberStyles(teamColor);
+
+    return (
+      <>
+        {/* Light Mode: Soft, bordered style */}
+        <div 
+          className="font-mono font-bold text-sm rounded-md px-2 py-1 inline-flex items-center justify-center min-w-[36px] dark:hidden"
+          style={{ 
+            color: light.text,
+            backgroundColor: light.background,
+            border: `1px solid ${light.text}33` // Subtle border with transparency
+          }}
+        >
+          {driverNumber || '-'}
+        </div>
+        
+        {/* Dark Mode: Solid, vibrant style */}
+        <div 
+          className="font-mono font-bold text-sm rounded-md px-2 py-1 hidden items-center justify-center min-w-[36px] dark:inline-flex"
+          style={{ 
+            color: dark.text,
+            backgroundColor: dark.background
+            // No border needed for the solid look in dark mode
+          }}
+        >
+          {driverNumber || '-'}
+        </div>
+      </>
+    );
+  };
+
   // Get highlight data
   const raceWinner = results.find(r => r.position === 1);
   const poleSitter = results.find(r => r.pole);
   const fastestLapDriver = results.find(r => r.fastestlap);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Race Results</h1>
+    <div className="p-4 md:p-8 space-y-6 md:space-y-8">
+      {/* Header with track selection */}
+      <div className="flex items-center justify-between">
         <Select value={selectedTrack} onValueChange={setSelectedTrack}>
-          <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Select a track..." />
+          <SelectTrigger className="w-48 md:w-[300px]">
+            <SelectValue placeholder="Select a track...">
+              {selectedTrack && tracks.find(t => t.id === selectedTrack) && (
+                <div className="flex items-center justify-between w-full">
+                  <span className="font-medium truncate">
+                    {tracks.find(t => t.id === selectedTrack)?.name}
+                  </span>
+                  <span className="text-xs text-muted-foreground ml-2">
+                    {tracks.find(t => t.id === selectedTrack)?.type}
+                  </span>
+                </div>
+              )}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {tracks.map((track) => (
               <SelectItem key={track.id} value={track.id}>
-                {track.name} ({track.type})
+                <div className="flex flex-col">
+                  <span className="font-medium">{track.name}</span>
+                  <span className="text-xs text-muted-foreground">{track.type}</span>
+                </div>
               </SelectItem>
             ))}
           </SelectContent>
@@ -277,99 +450,114 @@ export default function ResultsPage() {
       </div>
 
       {results.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          {/* Race Winner Box */}
-          <Card className="bg-[#0B0F19] border-none">
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-gray-400">Race Winner</span>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M5 3h14l2 4h-18l2-4z"/>
-                  <path d="M17 7v6h-10v-6"/>
-                  <path d="M7 21v-4h10v4"/>
-                  <path d="M7 17l-3-4h16l-3 4"/>
-                </svg>
-              </div>
-              <div className="flex items-center gap-3">
-                <div 
-                  className="w-1 h-12" 
-                  style={{ backgroundColor: raceWinner?.teamDetails.color }}
-                />
-                <div>
-                  <div className="text-xl font-bold">{raceWinner?.driverDetails.name}</div>
-                  <div className="text-2xl font-mono">{raceWinner?.time}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 items-stretch">
+          {/* Race Winner Card */}
+          <Card className="min-h-[120px]">
+            <CardHeader className="pb-2 min-h-[88px]">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <CardTitle className="text-2xl font-bold mb-2 text-yellow-500">
+                    {raceWinner?.driverDetails.name || '-'}
+                  </CardTitle>
+                  <div className="text-sm text-muted-foreground mb-1">Race Winner</div>
+                  <div className="text-lg font-mono text-muted-foreground">
+                    {raceWinner?.time || '-'}
+                  </div>
                 </div>
+                <IconTrophy className="h-6 w-6 text-yellow-500" />
               </div>
-            </div>
+            </CardHeader>
           </Card>
 
-          {/* Pole Position Box */}
-          <Card className="bg-[#0B0F19] border-none">
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-gray-400">Pole Position</span>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="8" r="6"/>
-                  <path d="M12 14v8"/>
-                  <path d="M9 18h6"/>
-                </svg>
-              </div>
-              <div className="flex items-center gap-3">
-                <div 
-                  className="w-1 h-12" 
-                  style={{ backgroundColor: poleSitter?.teamDetails.color }}
-                />
-                <div>
-                  <div className="text-xl font-bold">{poleSitter?.driverDetails.name}</div>
-                  <div className="text-2xl font-mono">1:15.372</div>
+          {/* Pole Position Card */}
+          <Card className="min-h-[120px]">
+            <CardHeader className="pb-2 min-h-[88px]">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <CardTitle className="text-2xl font-bold mb-2 text-purple-500">
+                    {poleSitter?.driverDetails.name || '-'}
+                  </CardTitle>
+                  <div className="text-sm text-muted-foreground mb-1">Pole Position</div>
+                  <div className="text-lg font-mono text-muted-foreground">
+                    1:15.372
+                  </div>
                 </div>
+                <IconFlag className="h-6 w-6 text-purple-500" />
               </div>
-            </div>
+            </CardHeader>
           </Card>
 
-          {/* Fastest Lap Box */}
-          <Card className="bg-[#0B0F19] border-none">
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-gray-400">Fastest Lap</span>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M12 6v6l4 2"/>
-                </svg>
-              </div>
-              <div className="flex items-center gap-3">
-                <div 
-                  className="w-1 h-12" 
-                  style={{ backgroundColor: fastestLapDriver?.teamDetails.color }}
-                />
-                <div>
-                  <div className="text-xl font-bold">{fastestLapDriver?.driverDetails.name}</div>
-                  <div className="text-2xl font-mono">
+          {/* Fastest Lap Card */}
+          <Card className="min-h-[120px]">
+            <CardHeader className="pb-2 min-h-[88px]">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <CardTitle className="text-2xl font-bold mb-2 text-purple-500">
+                    {fastestLapDriver?.driverDetails.name || '-'}
+                  </CardTitle>
+                  <div className="text-sm text-muted-foreground mb-1">Fastest Lap</div>
+                  <div className="text-lg font-mono text-muted-foreground">
                     {fastestLapDriver?.fastestLapNumber && fastestLapDriver?.fastestLapTime
                       ? `Lap ${fastestLapDriver.fastestLapNumber} - ${fastestLapDriver.fastestLapTime}`
                       : '-'
                     }
                   </div>
                 </div>
+                <IconClock className="h-6 w-6 text-purple-500" />
               </div>
-            </div>
+            </CardHeader>
           </Card>
         </div>
       )}
 
-      <Card className="p-6">
-        {error ? (
-          <div className="text-red-500">{error}</div>
-        ) : loading ? (
-          <div className="text-center py-4">Loading results...</div>
-        ) : results.length > 0 ? (
-          <DataTable columns={columns} data={results} />
-        ) : (
-          <div className="text-center py-4">
-            {selectedTrack ? 'No results available for this track.' : 'Select a track to view results.'}
-          </div>
-        )}
-      </Card>
+      {error ? (
+        <div className="text-red-500 text-center py-8">{error}</div>
+      ) : tracksLoading ? (
+        <div className="flex flex-col items-center justify-center py-8 space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div className="text-muted-foreground">Loading tracks...</div>
+        </div>
+      ) : loading ? (
+        <div className="flex flex-col items-center justify-center py-8 space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div className="text-muted-foreground">Loading results...</div>
+        </div>
+      ) : selectedTrack ? (
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'race' | 'qualifying')} className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="race">Race</TabsTrigger>
+            <TabsTrigger value="qualifying">Qualifying</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="race" className="mt-6">
+            {results.length > 0 ? (
+              <div className="overflow-x-auto">
+                <DataTable columns={raceColumns} data={results} />
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No race results available for this track.
+              </div>
+            )}
+          </TabsContent>
+          
+          <TabsContent value="qualifying" className="mt-6">
+            {qualifyingResults.length > 0 ? (
+              <div className="overflow-x-auto">
+                <DataTable columns={qualifyingColumns} data={qualifyingResults} />
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No qualifying results available for this track.
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <div className="text-center py-8 text-muted-foreground">
+          Select a track to view results.
+        </div>
+      )}
     </div>
   );
 }

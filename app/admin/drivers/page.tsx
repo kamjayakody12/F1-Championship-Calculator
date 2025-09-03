@@ -31,6 +31,7 @@ export default function AdminDriversPage() {
   const [drivers, setDrivers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [driverName, setDriverName] = useState("");
+  const [driverNumber, setDriverNumber] = useState("");
   const [driverTeamId, setDriverTeamId] = useState("");
   const [driverImageFile, setDriverImageFile] = useState<File | null>(null);
 
@@ -83,6 +84,16 @@ export default function AdminDriversPage() {
 
   const availableTeamsForNewDriver = teams;
 
+  // Function to check if driver number is already taken
+  function isDriverNumberTaken(driverNumber: string, excludeDriverId?: string): boolean {
+    if (!driverNumber) return false; // Allow empty numbers
+    const num = parseInt(driverNumber);
+    return drivers.some(driver => 
+      driver.driver_number === num && 
+      (!excludeDriverId || driver.id !== excludeDriverId)
+    );
+  }
+
   async function addDriver(e?: React.FormEvent) {
     e?.preventDefault();
     if (!driverName.trim()) {
@@ -91,6 +102,10 @@ export default function AdminDriversPage() {
     }
     if (!driverTeamId) {
       toast.error("Please select a team.");
+      return;
+    }
+    if (driverNumber && isDriverNumberTaken(driverNumber)) {
+      toast.error(`Driver number ${driverNumber} is already taken.`);
       return;
     }
 
@@ -106,6 +121,7 @@ export default function AdminDriversPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: driverName,
+        driver_number: driverNumber ? parseInt(driverNumber) : null,
         teamId: driverTeamId,
         image: imageUrl,
       }),
@@ -113,6 +129,7 @@ export default function AdminDriversPage() {
 
     if (res.ok) {
       setDriverName("");
+      setDriverNumber("");
       setDriverTeamId("");
       setDriverImageFile(null);
       fetchDrivers();
@@ -210,6 +227,22 @@ export default function AdminDriversPage() {
                   required
                 />
               </div>
+              {/* Driver Number */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="driver-number" className="text-right">
+                  Number
+                </Label>
+                <Input
+                  id="driver-number"
+                  type="number"
+                  className="col-span-3"
+                  value={driverNumber}
+                  onChange={(e) => setDriverNumber(e.target.value)}
+                  placeholder="Driver Number"
+                  min="1"
+                  max="99"
+                />
+              </div>
               {/* Team */}
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="team-select" className="text-right">
@@ -264,7 +297,7 @@ export default function AdminDriversPage() {
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
-              {["Name", "Points", "Team", "Actions"].map((h) => (
+              {["Name", "Number", "Points", "Team", "Actions"].map((h) => (
                 <th
                   key={h}
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
@@ -287,6 +320,9 @@ export default function AdminDriversPage() {
                 >
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     {driver.name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    {driver.driver_number || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     {driver.points || 0}
@@ -315,13 +351,13 @@ export default function AdminDriversPage() {
                     </Select>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                    {/* Edit Image Dialog */}
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm">Edit Image</Button>
-                      </DialogTrigger>
-                      <EditImageContent driver={driver} onSaved={fetchDrivers} />
-                    </Dialog>
+                    {/* Edit Driver Dialog */}
+                    <EditDriverContent 
+                      driver={driver} 
+                      teams={teams} 
+                      onSaved={fetchDrivers}
+                      isDriverNumberTaken={isDriverNumberTaken}
+                    />
                     <Button
                       variant="destructive"
                       size="sm"
@@ -340,16 +376,30 @@ export default function AdminDriversPage() {
   );
 }
 
-function EditImageContent({ driver, onSaved }: { driver: any; onSaved: () => void }) {
+function EditDriverContent({ 
+  driver, 
+  teams, 
+  onSaved, 
+  isDriverNumberTaken 
+}: { 
+  driver: any; 
+  teams: any[]; 
+  onSaved: () => void;
+  isDriverNumberTaken: (driverNumber: string, excludeDriverId?: string) => boolean;
+}) {
   const supabase = createClient();
+  const [name, setName] = useState(driver.name || "");
+  const [driverNumber, setDriverNumber] = useState(driver.driver_number || "");
+  const [points, setPoints] = useState(driver.points || 0);
   const [image, setImage] = useState<string>(driver.image || "");
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false);
 
   async function upload(file: File): Promise<string | null> {
     try {
       const ext = file.name.split(".").pop() || "png";
-      const safeName = (driver.name || "driver").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 32);
+      const safeName = (name || "driver").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 32);
       const path = `drivers/${Date.now()}-${safeName}.${ext}`;
       const { error } = await supabase.storage.from("driver-images").upload(path, file, { upsert: false });
       if (error) { toast.error("Image upload failed: " + error.message); return null; }
@@ -362,51 +412,128 @@ function EditImageContent({ driver, onSaved }: { driver: any; onSaved: () => voi
   }
 
   async function save() {
+    if (!name.trim()) {
+      toast.error("Please enter a driver name");
+      return;
+    }
+
+    // Check for duplicate driver number (excluding current driver)
+    if (driverNumber && isDriverNumberTaken(driverNumber, driver.id)) {
+      toast.error(`Driver number ${driverNumber} is already taken.`);
+      return;
+    }
+
     setSaving(true);
-    let url = image;
+    let imageUrl = image;
     if (file) {
       const uploaded = await upload(file);
       if (!uploaded) { setSaving(false); return; }
-      url = uploaded;
+      imageUrl = uploaded;
     }
+
     const res = await fetch("/api/drivers", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ driverId: driver.id, image: url }),
+      body: JSON.stringify({ 
+        driverId: driver.id, 
+        name: name.trim(),
+        driver_number: driverNumber ? parseInt(driverNumber) : null,
+        points: points ? parseInt(points.toString()) : 0,
+        image: imageUrl 
+      }),
     });
+    
     setSaving(false);
     if (res.ok) {
       onSaved();
-      toast.success("Driver image updated.");
+      toast.success("Driver updated successfully!");
+      setOpen(false); // Close the dialog
     } else {
       let msg = "Unknown error";
       try { const { error } = await res.json(); msg = error || msg; } catch {}
-      toast.error("Failed to update image: " + msg);
+      toast.error("Failed to update driver: " + msg);
     }
   }
 
   return (
-    <DialogContent className="sm:max-w-[425px]">
-      <DialogHeader>
-        <DialogTitle>Edit Driver Image</DialogTitle>
-        <DialogDescription>Update the image URL for {driver.name}.</DialogDescription>
-      </DialogHeader>
-      <div className="grid gap-4 py-4">
-        <div className="grid grid-cols-4 items-center gap-4">
-          <Label htmlFor="edit-driver-image-file" className="text-right">Image File</Label>
-          <Input
-            id="edit-driver-image-file"
-            type="file"
-            accept="image/*"
-            className="col-span-3"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-          />
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">Edit Driver</Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>Edit Driver</DialogTitle>
+          <DialogDescription>Update all information for {driver.name}.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          {/* Name */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="edit-driver-name" className="text-right">
+              Name
+            </Label>
+            <Input
+              id="edit-driver-name"
+              className="col-span-3"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Driver Name"
+              required
+            />
+          </div>
+
+          {/* Driver Number */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="edit-driver-number" className="text-right">
+              Number
+            </Label>
+            <Input
+              id="edit-driver-number"
+              type="number"
+              className="col-span-3"
+              value={driverNumber}
+              onChange={(e) => setDriverNumber(e.target.value)}
+              placeholder="Driver Number"
+              min="1"
+              max="99"
+            />
+          </div>
+
+          {/* Points */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="edit-driver-points" className="text-right">
+              Points
+            </Label>
+            <Input
+              id="edit-driver-points"
+              type="number"
+              className="col-span-3"
+              value={points}
+              onChange={(e) => setPoints(parseInt(e.target.value) || 0)}
+              placeholder="Points"
+              min="0"
+            />
+          </div>
+
+          {/* Image */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="edit-driver-image-file" className="text-right">
+              Image
+            </Label>
+            <Input
+              id="edit-driver-image-file"
+              type="file"
+              accept="image/*"
+              className="col-span-3"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+            />
+          </div>
         </div>
-        {/* Removed URL input: browse-only upload */}
-      </div>
-      <DialogFooter>
-        <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
-      </DialogFooter>
-    </DialogContent>
+        <DialogFooter>
+          <Button onClick={save} disabled={saving}>
+            {saving ? "Saving..." : "Save Changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

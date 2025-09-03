@@ -376,7 +376,14 @@ export default function DriverStatsPage() {
   const selectedDriverData = drivers.find(d => d.id === selectedDriver);
 
   if (loading) {
-    return <div className="p-4 md:p-8">Loading driver stats...</div>;
+    return (
+      <div className="p-4 md:p-8">
+        <div className="flex flex-col items-center justify-center py-8 space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div className="text-muted-foreground">Loading driver stats...</div>
+        </div>
+      </div>
+    );
   }
 
   // Prepare chart data for radial chart - each ring represents a different category
