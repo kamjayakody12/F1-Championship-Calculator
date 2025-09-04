@@ -88,6 +88,7 @@ function extractImageUrl(htmlString: string): string {
   return match ? match[1] : "";
 }
 
+
 const COLORS = {
   wins: "#FFD700", // Gold
   podiums: "#4169E1", // Blue
@@ -373,7 +374,7 @@ export default function DriverStatsPage() {
      }
    };
 
-  const selectedDriverData = drivers.find(d => d.id === selectedDriver);
+  const selectedDriverData = drivers.find((d: Driver) => d.id === selectedDriver);
 
   if (loading) {
     return (
@@ -475,7 +476,7 @@ export default function DriverStatsPage() {
               <SelectValue placeholder="Select Driver" />
             </SelectTrigger>
             <SelectContent>
-              {drivers.map((driver) => (
+              {drivers.map((driver: Driver) => (
                 <SelectItem key={driver.id} value={driver.id}>
                   {driver.name} ({driver.team})
                 </SelectItem>

@@ -3,19 +3,18 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import DataTable from '@/components/data-table';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/db';
 import { Result } from '@/models/Result';
 import { IconTrophy, IconFlag, IconClock } from '@tabler/icons-react';
-
 // Helper function to extract image URL from HTML string
 function extractImageUrl(htmlString: string): string {
   if (!htmlString) return '';
   const match = htmlString.match(/src="([^"]+)"/);
   return match ? match[1] : '';
 }
+
 
 interface Track {
   id: string;
@@ -60,15 +59,21 @@ interface ExtendedResult extends Result {
   q3Time?: string;
 }
 
+interface QualifyingResult {
+  id: string;
+  track: string;
+  position: number;
+  driver: string;
+}
+
 export default function ResultsPage() {
   const [selectedTrack, setSelectedTrack] = useState<string>('');
   const [tracks, setTracks] = useState<Track[]>([]);
   const [results, setResults] = useState<ExtendedResult[]>([]);
-  const [qualifyingResults, setQualifyingResults] = useState<ExtendedResult[]>([]);
+  const [qualifyingResults, setQualifyingResults] = useState<QualifyingResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [tracksLoading, setTracksLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'race' | 'qualifying'>('race');
 
   // Fetch tracks from selected-tracks API
   useEffect(() => {
@@ -252,18 +257,16 @@ export default function ResultsPage() {
           {(() => {
             const logoUrl = extractImageUrl(row.original.teamDetails?.logo || '');
             return logoUrl ? (
-              <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-md flex items-center justify-center p-1">
-                <img
-                  src={logoUrl}
-                  alt={`${row.original.teamDetails?.name} logo`}
-                  className="w-full h-full object-contain"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
-              </div>
+              <img
+                src={logoUrl}
+                alt={`${row.original.teamDetails?.name} logo`}
+                className="w-6 h-6 object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
             ) : (
-              <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-md flex items-center justify-center">
+              <div className="w-6 h-6 flex items-center justify-center">
                 <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                   {row.original.teamDetails?.name?.charAt(0) || '?'}
                 </span>
@@ -277,22 +280,16 @@ export default function ResultsPage() {
       )
     },
     {
-      accessorKey: 'time',
-      header: 'TIME',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <div className="font-mono text-sm">
-          {row.original.racefinished ? (row.original.position === 1 ? row.original.time : '-') : 'DNF'}
-        </div>
-      )
-    },
-    {
-      accessorKey: 'gap',
-      header: 'GAP',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <div className="font-mono text-sm text-muted-foreground">
-          {row.original.racefinished && row.original.position > 1 ? row.original.gap : '-'}
-        </div>
-      )
+      accessorKey: 'qualifyingPosition',
+      header: 'STARTING GRID',
+      cell: ({ row }: { row: { original: ExtendedResult } }) => {
+        const qualifyingResult = qualifyingResults.find((q: QualifyingResult) => q.driver === row.original.driver);
+        return (
+          <div className="font-mono text-sm">
+            {qualifyingResult?.position || '-'}
+          </div>
+        );
+      }
     },
     {
       accessorKey: 'points',
@@ -305,74 +302,6 @@ export default function ResultsPage() {
     }
   ];
 
-  // Qualifying results columns
-  const qualifyingColumns = [
-    {
-      accessorKey: 'position',
-      header: 'POS',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <div className="font-mono font-bold text-lg">{row.original.position}</div>
-      )
-    },
-    {
-      accessorKey: 'driverDetails.driver_number',
-      header: 'NO',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <DriverNumberCell 
-          driverNumber={row.original.driverDetails.driver_number} 
-          teamColor={row.original.teamDetails?.color || '#282828'} 
-        />
-      )
-    },
-    {
-      accessorKey: 'driverDetails.name',
-      header: 'DRIVER',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <div className="font-semibold">{row.original.driverDetails.name}</div>
-      )
-    },
-    {
-      accessorKey: 'teamDetails.name',
-      header: 'TEAM',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <div className="flex items-center gap-3">
-          {(() => {
-            const logoUrl = extractImageUrl(row.original.teamDetails?.logo || '');
-            return logoUrl ? (
-              <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-md flex items-center justify-center p-1">
-                <img
-                  src={logoUrl}
-                  alt={`${row.original.teamDetails?.name} logo`}
-                  className="w-full h-full object-contain"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
-              </div>
-            ) : (
-              <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-md flex items-center justify-center">
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  {row.original.teamDetails?.name?.charAt(0) || '?'}
-                </span>
-              </div>
-            );
-          })()}
-          <span className="text-sm font-medium">
-            {row.original.teamDetails?.name}
-          </span>
-        </div>
-      )
-    },
-    {
-      accessorKey: 'qualifyingTime',
-      header: 'TIME',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <div className="font-mono text-sm">
-          {row.original.qualifyingTime || '-'}
-        </div>
-      )
-    }
-  ];
 
   // Helper function to format time
   const formatTime = (time: string) => {
@@ -380,7 +309,7 @@ export default function ResultsPage() {
   };
 
   // Reusable driver number cell component
-  const DriverNumberCell = ({ driverNumber, teamColor }: { driverNumber: number | string, teamColor: string }) => {
+  const DriverNumberCell = ({ driverNumber, teamColor }: { driverNumber: number | string | null, teamColor: string }) => {
     const { light, dark } = getDriverNumberStyles(teamColor);
 
     return (
@@ -413,44 +342,46 @@ export default function ResultsPage() {
   };
 
   // Get highlight data
-  const raceWinner = results.find(r => r.position === 1);
-  const poleSitter = results.find(r => r.pole);
-  const fastestLapDriver = results.find(r => r.fastestlap);
+  const raceWinner = results?.find((r: ExtendedResult) => r.position === 1);
+  const poleSitter = results?.find((r: ExtendedResult) => r.pole);
+  const fastestLapDriver = results?.find((r: ExtendedResult) => r.fastestlap);
 
   return (
     <div className="p-4 md:p-8 space-y-6 md:space-y-8">
       {/* Header with track selection */}
-      <div className="flex items-center justify-between">
-        <Select value={selectedTrack} onValueChange={setSelectedTrack}>
-          <SelectTrigger className="w-48 md:w-[300px]">
-            <SelectValue placeholder="Select a track...">
-              {selectedTrack && tracks.find(t => t.id === selectedTrack) && (
-                <div className="flex items-center justify-between w-full">
-                  <span className="font-medium truncate">
-                    {tracks.find(t => t.id === selectedTrack)?.name}
-                  </span>
-                  <span className="text-xs text-muted-foreground ml-2">
-                    {tracks.find(t => t.id === selectedTrack)?.type}
-                  </span>
-                </div>
-              )}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {tracks.map((track) => (
-              <SelectItem key={track.id} value={track.id}>
-                <div className="flex flex-col">
-                  <span className="font-medium">{track.name}</span>
-                  <span className="text-xs text-muted-foreground">{track.type}</span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {!tracksLoading && (
+        <div className="flex items-center justify-between">
+          <Select value={selectedTrack} onValueChange={setSelectedTrack}>
+            <SelectTrigger className="w-48 md:w-[300px]">
+              <SelectValue placeholder="Select a track...">
+                {selectedTrack && tracks.find((t: Track) => t.id === selectedTrack) && (
+                  <div className="flex items-center justify-between w-full">
+                    <span className="font-medium truncate">
+                      {tracks.find((t: Track) => t.id === selectedTrack)?.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {tracks.find((t: Track) => t.id === selectedTrack)?.type}
+                    </span>
+                  </div>
+                )}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {tracks.map((track: Track) => (
+                <SelectItem key={track.id} value={track.id}>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{track.name}</span>
+                    <span className="text-xs text-muted-foreground">{track.type}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
-      {results.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 items-stretch">
+      {results && results.length > 0 && !loading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 items-stretch animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
           {/* Race Winner Card */}
           <Card className="min-h-[120px]">
             <CardHeader className="pb-2 min-h-[88px]">
@@ -459,9 +390,30 @@ export default function ResultsPage() {
                   <CardTitle className="text-2xl font-bold mb-2 text-yellow-500">
                     {raceWinner?.driverDetails.name || '-'}
                   </CardTitle>
-                  <div className="text-sm text-muted-foreground mb-1">Race Winner</div>
-                  <div className="text-lg font-mono text-muted-foreground">
-                    {raceWinner?.time || '-'}
+                  <div className="text-sm text-muted-foreground mb-4">Race Winner</div>
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const logoUrl = extractImageUrl(raceWinner?.teamDetails?.logo || '');
+                      return logoUrl ? (
+                        <img
+                          src={logoUrl}
+                          alt={`${raceWinner?.teamDetails?.name} logo`}
+                          className="w-4 h-4 object-contain"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-4 h-4 flex items-center justify-center">
+                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                            {raceWinner?.teamDetails?.name?.charAt(0) || '?'}
+                          </span>
+                        </div>
+                      );
+                    })()}
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {raceWinner?.teamDetails?.name || '-'}
+                    </span>
                   </div>
                 </div>
                 <IconTrophy className="h-6 w-6 text-yellow-500" />
@@ -474,15 +426,36 @@ export default function ResultsPage() {
             <CardHeader className="pb-2 min-h-[88px]">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <CardTitle className="text-2xl font-bold mb-2 text-purple-500">
+                  <CardTitle className="text-2xl font-bold mb-2 text-green-600">
                     {poleSitter?.driverDetails.name || '-'}
                   </CardTitle>
-                  <div className="text-sm text-muted-foreground mb-1">Pole Position</div>
-                  <div className="text-lg font-mono text-muted-foreground">
-                    1:15.372
+                  <div className="text-sm text-muted-foreground mb-4">Pole Position</div>
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const logoUrl = extractImageUrl(poleSitter?.teamDetails?.logo || '');
+                      return logoUrl ? (
+                        <img
+                          src={logoUrl}
+                          alt={`${poleSitter?.teamDetails?.name} logo`}
+                          className="w-4 h-4 object-contain"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-4 h-4 flex items-center justify-center">
+                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                            {poleSitter?.teamDetails?.name?.charAt(0) || '?'}
+                          </span>
+                        </div>
+                      );
+                    })()}
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {poleSitter?.teamDetails?.name || '-'}
+                    </span>
                   </div>
                 </div>
-                <IconFlag className="h-6 w-6 text-purple-500" />
+                <IconFlag className="h-6 w-6 text-green-600" />
               </div>
             </CardHeader>
           </Card>
@@ -495,12 +468,30 @@ export default function ResultsPage() {
                   <CardTitle className="text-2xl font-bold mb-2 text-purple-500">
                     {fastestLapDriver?.driverDetails.name || '-'}
                   </CardTitle>
-                  <div className="text-sm text-muted-foreground mb-1">Fastest Lap</div>
-                  <div className="text-lg font-mono text-muted-foreground">
-                    {fastestLapDriver?.fastestLapNumber && fastestLapDriver?.fastestLapTime
-                      ? `Lap ${fastestLapDriver.fastestLapNumber} - ${fastestLapDriver.fastestLapTime}`
-                      : '-'
-                    }
+                  <div className="text-sm text-muted-foreground mb-4">Fastest Lap</div>
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const logoUrl = extractImageUrl(fastestLapDriver?.teamDetails?.logo || '');
+                      return logoUrl ? (
+                        <img
+                          src={logoUrl}
+                          alt={`${fastestLapDriver?.teamDetails?.name} logo`}
+                          className="w-4 h-4 object-contain"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-4 h-4 flex items-center justify-center">
+                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                            {fastestLapDriver?.teamDetails?.name?.charAt(0) || '?'}
+                          </span>
+                        </div>
+                      );
+                    })()}
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {fastestLapDriver?.teamDetails?.name || '-'}
+                    </span>
                   </div>
                 </div>
                 <IconClock className="h-6 w-6 text-purple-500" />
@@ -523,36 +514,17 @@ export default function ResultsPage() {
           <div className="text-muted-foreground">Loading results...</div>
         </div>
       ) : selectedTrack ? (
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'race' | 'qualifying')} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="race">Race</TabsTrigger>
-            <TabsTrigger value="qualifying">Qualifying</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="race" className="mt-6">
-            {results.length > 0 ? (
-              <div className="overflow-x-auto">
-                <DataTable columns={raceColumns} data={results} />
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                No race results available for this track.
-              </div>
-            )}
-          </TabsContent>
-          
-          <TabsContent value="qualifying" className="mt-6">
-            {qualifyingResults.length > 0 ? (
-              <div className="overflow-x-auto">
-                <DataTable columns={qualifyingColumns} data={qualifyingResults} />
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                No qualifying results available for this track.
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+        <div className="w-full animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
+          {results && results.length > 0 ? (
+            <div className="overflow-x-auto">
+              <DataTable columns={raceColumns} data={results} />
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              No race results available for this track.
+            </div>
+          )}
+        </div>
       ) : (
         <div className="text-center py-8 text-muted-foreground">
           Select a track to view results.

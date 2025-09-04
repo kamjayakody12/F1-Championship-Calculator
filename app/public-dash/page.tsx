@@ -32,10 +32,10 @@ export default async function HomePage() {
   }
 
   // Calculate constructor points for each team
-  const teams = (teamsData || []).map((team) => {
-    const teamDrivers = (drivers || []).filter((driver) => driver.team === team.id);
+  const teams = (teamsData || []).map((team: any) => {
+    const teamDrivers = (drivers || []).filter((driver: any) => driver.team === team.id);
     const constructorPoints = teamDrivers.reduce(
-      (sum, driver) => sum + (driver.points || 0),
+      (sum: number, driver: any) => sum + (driver.points || 0),
       0
     );
     return { ...team, constructorPoints };
