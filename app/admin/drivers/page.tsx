@@ -28,8 +28,8 @@ const NO_TEAM = "no-team";
 
 export default function AdminDriversPage() {
   const supabase = createClient();
-  const [drivers, setDrivers] = useState<any[]>([]);
-  const [teams, setTeams] = useState<any[]>([]);
+  const [drivers, setDrivers] = useState<Record<string, unknown>[]>([]);
+  const [teams, setTeams] = useState<Record<string, unknown>[]>([]);
   const [driverName, setDriverName] = useState("");
   const [driverNumber, setDriverNumber] = useState("");
   const [driverTeamId, setDriverTeamId] = useState("");
@@ -38,7 +38,7 @@ export default function AdminDriversPage() {
   async function uploadDriverImage(file: File, suggestedName: string): Promise<string | null> {
     try {
       const ext = file.name.split(".").pop() || "png";
-      const safeName = suggestedName.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 32);
+      const safeName = (suggestedName as string).toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 32);
       const path = `drivers/${Date.now()}-${safeName}.${ext}`;
       const { error } = await supabase.storage.from("driver-images").upload(path, file, { upsert: true });
       if (error) {
@@ -47,7 +47,7 @@ export default function AdminDriversPage() {
       }
       const { data } = supabase.storage.from("driver-images").getPublicUrl(path);
       return data?.publicUrl || null;
-    } catch (e: any) {
+    } catch {
       toast.error("Image upload error");
       return null;
     }
@@ -60,7 +60,7 @@ export default function AdminDriversPage() {
     })
     fetchDrivers();
     fetchTeams();
-  }, []);
+  }, [supabase.auth]);
 
   async function fetchDrivers() {
     const res = await fetch("/api/drivers");
@@ -82,7 +82,6 @@ export default function AdminDriversPage() {
     }
   }
 
-  const availableTeamsForNewDriver = teams;
 
   // Function to check if driver number is already taken
   function isDriverNumberTaken(driverNumber: string, excludeDriverId?: string): boolean {
@@ -259,9 +258,9 @@ export default function AdminDriversPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NO_TEAM} key={NO_TEAM}>Select Team</SelectItem>
-                    {availableTeamsForNewDriver.map((team) => (
-                      <SelectItem key={team.id} value={team.id.toString()}>
-                        {team.name}
+                    {teams.map((team: Record<string, unknown>) => (
+                      <SelectItem key={team.id as string} value={(team.id as string).toString()}>
+                        {team.name as string}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -308,31 +307,31 @@ export default function AdminDriversPage() {
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-600">
-               {drivers.map((driver) => {
+               {drivers.map((driver: Record<string, unknown>) => {
               const currentTeamId =
-                driver.team?.id?.toString() ??
+                (driver.team as Record<string, unknown>)?.id?.toString() ??
                 (typeof driver.team === "string" ? driver.team : NO_TEAM);
 
               return (
                 <tr
-                  key={driver.id}
+                  key={driver.id as string}
                   className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {driver.name}
+                    {driver.name as string}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {driver.driver_number || '-'}
+                    {(driver.driver_number as number) || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {driver.points || 0}
+                    {(driver.points as number) || 0}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     <Select
                       value={currentTeamId}
                       onValueChange={(newTeamId) =>
                         updateDriverTeam(
-                          driver.id,
+                          driver.id as string,
                           newTeamId === NO_TEAM ? "" : newTeamId
                         )
                       }
@@ -342,9 +341,9 @@ export default function AdminDriversPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={NO_TEAM}>No Team</SelectItem>
-                        {teams.map((team) => (
-                          <SelectItem key={team.id} value={team.id.toString()}>
-                            {team.name}
+                        {teams.map((team: Record<string, unknown>) => (
+                          <SelectItem key={team.id as string} value={(team.id as string).toString()}>
+                            {team.name as string}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -354,14 +353,13 @@ export default function AdminDriversPage() {
                     {/* Edit Driver Dialog */}
                     <EditDriverContent 
                       driver={driver} 
-                      teams={teams} 
                       onSaved={fetchDrivers}
                       isDriverNumberTaken={isDriverNumberTaken}
                     />
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={() => deleteDriver(driver.id)}
+                      onClick={() => deleteDriver(driver.id as string)}
                     >
                       Delete
                     </Button>
@@ -378,20 +376,18 @@ export default function AdminDriversPage() {
 
 function EditDriverContent({ 
   driver, 
-  teams, 
   onSaved, 
   isDriverNumberTaken 
 }: { 
-  driver: any; 
-  teams: any[]; 
+  driver: Record<string, unknown>; 
   onSaved: () => void;
   isDriverNumberTaken: (driverNumber: string, excludeDriverId?: string) => boolean;
 }) {
   const supabase = createClient();
-  const [name, setName] = useState(driver.name || "");
-  const [driverNumber, setDriverNumber] = useState(driver.driver_number || "");
-  const [points, setPoints] = useState(driver.points || 0);
-  const [image, setImage] = useState<string>(driver.image || "");
+  const [name, setName] = useState((driver.name as string) || "");
+  const [driverNumber, setDriverNumber] = useState((driver.driver_number as string) || "");
+  const [points, setPoints] = useState((driver.points as number) || 0);
+  const [image] = useState<string>((driver.image as string) || "");
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
@@ -412,13 +408,13 @@ function EditDriverContent({
   }
 
   async function save() {
-    if (!name.trim()) {
+    if (!(name as string).trim()) {
       toast.error("Please enter a driver name");
       return;
     }
 
     // Check for duplicate driver number (excluding current driver)
-    if (driverNumber && isDriverNumberTaken(driverNumber, driver.id)) {
+    if (driverNumber && isDriverNumberTaken(driverNumber, driver.id as string)) {
       toast.error(`Driver number ${driverNumber} is already taken.`);
       return;
     }
@@ -435,9 +431,9 @@ function EditDriverContent({
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
-        driverId: driver.id, 
-        name: name.trim(),
-        driver_number: driverNumber ? parseInt(driverNumber) : null,
+        driverId: driver.id as string, 
+        name: (name as string).trim(),
+        driver_number: driverNumber ? parseInt(driverNumber as string) : null,
         points: points ? parseInt(points.toString()) : 0,
         image: imageUrl 
       }),
@@ -463,7 +459,7 @@ function EditDriverContent({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Edit Driver</DialogTitle>
-          <DialogDescription>Update all information for {driver.name}.</DialogDescription>
+          <DialogDescription>Update all information for {driver.name as string}.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           {/* Name */}
@@ -474,7 +470,7 @@ function EditDriverContent({
             <Input
               id="edit-driver-name"
               className="col-span-3"
-              value={name}
+              value={name as string}
               onChange={(e) => setName(e.target.value)}
               placeholder="Driver Name"
               required
@@ -490,7 +486,7 @@ function EditDriverContent({
               id="edit-driver-number"
               type="number"
               className="col-span-3"
-              value={driverNumber}
+              value={driverNumber as string}
               onChange={(e) => setDriverNumber(e.target.value)}
               placeholder="Driver Number"
               min="1"
@@ -507,7 +503,7 @@ function EditDriverContent({
               id="edit-driver-points"
               type="number"
               className="col-span-3"
-              value={points}
+              value={points as number}
               onChange={(e) => setPoints(parseInt(e.target.value) || 0)}
               placeholder="Points"
               min="0"

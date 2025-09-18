@@ -73,10 +73,13 @@ export default async function DriverTilesPage() {
           const extraRight = nameLc === 'dilon' ? 40 : 0;
           const nudgeRightPx = 24 + extraRight;
           const isMclaren = teamName?.toLowerCase() === 'mclaren';
-          const logoW = isMclaren ? 320 : 420;
-          const logoH = isMclaren ? 180 : 240;
-          const logoOpacity = isMclaren ? 0.4 : 0.25;
-          const logoFilter = isMclaren ? 'none' : 'blur(0.25px)';
+          const isRB = teamName === 'RB';
+          const isStakeF1 = teamName === 'Stake F1 Team';
+          const isSpecialTeam = isMclaren || isRB || isStakeF1;
+          const logoW = isSpecialTeam ? 320 : 420;
+          const logoH = isSpecialTeam ? 180 : 240;
+          const logoOpacity = isSpecialTeam ? 0.4 : 0.25;
+          const logoFilter = isSpecialTeam ? 'none' : 'blur(0.25px)';
           return (
             <div
               key={driver.id}

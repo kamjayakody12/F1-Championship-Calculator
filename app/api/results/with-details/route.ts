@@ -10,11 +10,25 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "No track specified" }, { status: 400 });
   }
 
-  const cacheKey = `results-with-details:track:${track}:v2`; // Updated cache key to force refresh
-  const cached = apiCache.get<any[]>(cacheKey);
-  if (cached) return NextResponse.json(cached, withCacheControlHeaders());
-
   try {
+    // First, get the event type for this track
+    const { data: selectedTrack, error: trackError } = await supabase
+      .from("selected_tracks")
+      .select("type")
+      .eq("id", track)
+      .single();
+
+    if (trackError) {
+      console.error("Error fetching track type:", trackError);
+      return NextResponse.json({ error: trackError.message }, { status: 500 });
+    }
+
+    const eventType = selectedTrack?.type || 'Race';
+
+    const cacheKey = `results-with-details:track:${track}:${eventType}:v3`; // Updated cache key to force refresh
+    const cached = apiCache.get<any[]>(cacheKey);
+    if (cached) return NextResponse.json(cached, withCacheControlHeaders());
+
     // Fetch results with driver and team details
     const { data: results, error } = await supabase
       .from("results")
@@ -80,7 +94,7 @@ export async function GET(request: Request) {
       },
       time: result.racefinished ? (result.finishing_position === 1 ? '1:35:21.231' : '-') : 'DNF',
       gap: result.racefinished && result.finishing_position > 1 ? '-' : '-',
-      points: calculatePoints(result.finishing_position, result.pole, result.fastestlap, 'Race'),
+      points: calculatePoints(result.finishing_position, result.pole, result.fastestlap, eventType as 'Race' | 'Sprint'),
       laps: result.racefinished ? 70 : Math.floor(Math.random() * 50) + 10,
       fastestLapTime: result.fastestlap ? '1:19.409' : undefined,
       fastestLapNumber: result.fastestlap ? 45 : undefined

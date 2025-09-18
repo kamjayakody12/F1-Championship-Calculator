@@ -252,32 +252,39 @@ export default function ResultsPage() {
     {
       accessorKey: 'teamDetails.name',
       header: 'TEAM',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <div className="flex items-center gap-3">
-          {(() => {
-            const logoUrl = extractImageUrl(row.original.teamDetails?.logo || '');
-            return logoUrl ? (
-              <img
-                src={logoUrl}
-                alt={`${row.original.teamDetails?.name} logo`}
-                className="w-6 h-6 object-contain"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            ) : (
-              <div className="w-6 h-6 flex items-center justify-center">
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  {row.original.teamDetails?.name?.charAt(0) || '?'}
-                </span>
-              </div>
-            );
-          })()}
-          <span className="text-sm font-medium">
-            {row.original.teamDetails?.name}
-          </span>
-        </div>
-      )
+      cell: ({ row }: { row: { original: ExtendedResult } }) => {
+        const isRB = row.original.teamDetails?.name === 'RB';
+        const isStakeF1 = row.original.teamDetails?.name === 'Stake F1 Team';
+        const logoSize = (isRB || isStakeF1) ? 'w-8 h-8' : 'w-6 h-6';
+        const fallbackSize = (isRB || isStakeF1) ? 'w-8 h-8' : 'w-6 h-6';
+        
+        return (
+          <div className="flex items-center gap-3">
+            {(() => {
+              const logoUrl = extractImageUrl(row.original.teamDetails?.logo || '');
+              return logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={`${row.original.teamDetails?.name} logo`}
+                  className={`${logoSize} object-contain`}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className={`${fallbackSize} flex items-center justify-center`}>
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    {row.original.teamDetails?.name?.charAt(0) || '?'}
+                  </span>
+                </div>
+              );
+            })()}
+            <span className="text-sm font-medium">
+              {row.original.teamDetails?.name}
+            </span>
+          </div>
+        );
+      }
     },
     {
       accessorKey: 'qualifyingPosition',
@@ -394,17 +401,22 @@ export default function ResultsPage() {
                   <div className="flex items-center gap-2">
                     {(() => {
                       const logoUrl = extractImageUrl(raceWinner?.teamDetails?.logo || '');
+                      const isRB = raceWinner?.teamDetails?.name === 'RB';
+                      const isStakeF1 = raceWinner?.teamDetails?.name === 'Stake F1 Team';
+                      const logoSize = (isRB || isStakeF1) ? 'w-6 h-6' : 'w-4 h-4';
+                      const fallbackSize = (isRB || isStakeF1) ? 'w-6 h-6' : 'w-4 h-4';
+                      
                       return logoUrl ? (
                         <img
                           src={logoUrl}
                           alt={`${raceWinner?.teamDetails?.name} logo`}
-                          className="w-4 h-4 object-contain"
+                          className={`${logoSize} object-contain`}
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
                           }}
                         />
                       ) : (
-                        <div className="w-4 h-4 flex items-center justify-center">
+                        <div className={`${fallbackSize} flex items-center justify-center`}>
                           <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                             {raceWinner?.teamDetails?.name?.charAt(0) || '?'}
                           </span>
@@ -433,17 +445,22 @@ export default function ResultsPage() {
                   <div className="flex items-center gap-2">
                     {(() => {
                       const logoUrl = extractImageUrl(poleSitter?.teamDetails?.logo || '');
+                      const isRB = poleSitter?.teamDetails?.name === 'RB';
+                      const isStakeF1 = poleSitter?.teamDetails?.name === 'Stake F1 Team';
+                      const logoSize = (isRB || isStakeF1) ? 'w-6 h-6' : 'w-4 h-4';
+                      const fallbackSize = (isRB || isStakeF1) ? 'w-6 h-6' : 'w-4 h-4';
+                      
                       return logoUrl ? (
                         <img
                           src={logoUrl}
                           alt={`${poleSitter?.teamDetails?.name} logo`}
-                          className="w-4 h-4 object-contain"
+                          className={`${logoSize} object-contain`}
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
                           }}
                         />
                       ) : (
-                        <div className="w-4 h-4 flex items-center justify-center">
+                        <div className={`${fallbackSize} flex items-center justify-center`}>
                           <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                             {poleSitter?.teamDetails?.name?.charAt(0) || '?'}
                           </span>
@@ -472,17 +489,22 @@ export default function ResultsPage() {
                   <div className="flex items-center gap-2">
                     {(() => {
                       const logoUrl = extractImageUrl(fastestLapDriver?.teamDetails?.logo || '');
+                      const isRB = fastestLapDriver?.teamDetails?.name === 'RB';
+                      const isStakeF1 = fastestLapDriver?.teamDetails?.name === 'Stake F1 Team';
+                      const logoSize = (isRB || isStakeF1) ? 'w-6 h-6' : 'w-4 h-4';
+                      const fallbackSize = (isRB || isStakeF1) ? 'w-6 h-6' : 'w-4 h-4';
+                      
                       return logoUrl ? (
                         <img
                           src={logoUrl}
                           alt={`${fastestLapDriver?.teamDetails?.name} logo`}
-                          className="w-4 h-4 object-contain"
+                          className={`${logoSize} object-contain`}
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
                           }}
                         />
                       ) : (
-                        <div className="w-4 h-4 flex items-center justify-center">
+                        <div className={`${fallbackSize} flex items-center justify-center`}>
                           <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                             {fastestLapDriver?.teamDetails?.name?.charAt(0) || '?'}
                           </span>

@@ -92,15 +92,22 @@ export default async function HomePage() {
                       <TableCell className="py-3 px-4 font-semibold text-foreground">{idx + 1}</TableCell>
                       <TableCell className="py-3 px-4 flex items-center gap-3">
                         {/* Team logo for driver */}
-                        {extractImageUrl(driver.teams?.logo || '') ? (
-                          <img 
-                            src={extractImageUrl(driver.teams.logo)} 
-                            alt={`${driver.teams?.name || 'Team'} logo`} 
-                            className="w-7 h-7 object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1" 
-                          />
-                        ) : (
-                          <span className="inline-block w-7 h-7 bg-muted rounded-full flex-shrink-0" />
-                        )}
+                        {(() => {
+                          const isRB = driver.teams?.name === 'RB';
+                          const isStakeF1 = driver.teams?.name === 'Stake F1 Team';
+                          const logoSize = (isRB || isStakeF1) ? 'w-9 h-9' : 'w-7 h-7';
+                          const fallbackSize = (isRB || isStakeF1) ? 'w-9 h-9' : 'w-7 h-7';
+                          
+                          return extractImageUrl(driver.teams?.logo || '') ? (
+                            <img 
+                              src={extractImageUrl(driver.teams.logo)} 
+                              alt={`${driver.teams?.name || 'Team'} logo`} 
+                              className={`${logoSize} object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1`} 
+                            />
+                          ) : (
+                            <span className={`inline-block ${fallbackSize} bg-muted rounded-full flex-shrink-0`} />
+                          );
+                        })()}
                         <span className="font-medium text-foreground">{driver.name}</span>
                       </TableCell>
                       <TableCell className="py-3 px-4 font-bold text-foreground">{driver.points}</TableCell>
@@ -142,15 +149,22 @@ export default async function HomePage() {
                       <TableCell className="py-4 px-6 font-semibold text-foreground">{idx + 1}</TableCell>
                       <TableCell className="py-4 px-6 flex items-center gap-3">
                         {/* Team logo */}
-                        {extractImageUrl(team.logo || '') ? (
-                          <img 
-                            src={extractImageUrl(team.logo)} 
-                            alt={`${team.name} logo`} 
-                            className="w-7 h-7 object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1" 
-                          />
-                        ) : (
-                          <span className="inline-block w-7 h-7 bg-muted rounded-full flex-shrink-0" />
-                        )}
+                        {(() => {
+                          const isRB = team.name === 'RB';
+                          const isStakeF1 = team.name === 'Stake F1 Team';
+                          const logoSize = (isRB || isStakeF1) ? 'w-9 h-9' : 'w-7 h-7';
+                          const fallbackSize = (isRB || isStakeF1) ? 'w-9 h-9' : 'w-7 h-7';
+                          
+                          return extractImageUrl(team.logo || '') ? (
+                            <img 
+                              src={extractImageUrl(team.logo)} 
+                              alt={`${team.name} logo`} 
+                              className={`${logoSize} object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1`} 
+                            />
+                          ) : (
+                            <span className={`inline-block ${fallbackSize} bg-muted rounded-full flex-shrink-0`} />
+                          );
+                        })()}
                         <span className="font-medium text-foreground">{team.name}</span>
                       </TableCell>
                       <TableCell className="py-4 px-6 font-bold text-foreground">{team.constructorPoints}</TableCell>

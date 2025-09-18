@@ -91,8 +91,8 @@ export default function TeamsPage() {
                   alt={`${teamName} logo`}
                   className="pointer-events-none select-none absolute right-0 top-1/2 -translate-y-1/2 opacity-25 z-0"
                   style={{
-                    width: 320,
-                    height: 180,
+                    width: (teamName === 'RB' || teamName === 'Stake F1 Team') ? 400 : 320,
+                    height: (teamName === 'RB' || teamName === 'Stake F1 Team') ? 225 : 180,
                     objectFit: "contain",
                     WebkitMaskImage:
                       'linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 70%, rgba(0,0,0,0.25) 88%, rgba(0,0,0,0) 100%)',

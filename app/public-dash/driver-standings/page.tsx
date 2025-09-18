@@ -154,10 +154,20 @@ export default function DriverStandingsPage() {
           return st?.track?.id === result.track;
         });
         const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+        const sprintPointsMapping = [8, 7, 6, 5, 4, 3, 2, 1];
         let points = 0;
         if (result.racefinished) {
           const pos = result.finishing_position ?? result.position; // support both column names
-          const basePoints = pos <= 10 ? racePointsMapping[(pos || 0) - 1] : 0;
+          
+          // Determine event type from schedule
+          const selectedTrack = selectedTrackMap.get(schedule?.track || '');
+          const eventType = selectedTrack?.type || 'Race';
+          
+          // Choose appropriate points mapping
+          const pointsMapping = eventType === 'Sprint' ? sprintPointsMapping : racePointsMapping;
+          const maxPositions = eventType === 'Sprint' ? 8 : 10;
+          
+          const basePoints = pos <= maxPositions ? pointsMapping[(pos || 0) - 1] : 0;
           const bonusPoints = (rules.polegivespoint && result.pole ? 1 : 0) + (rules.fastestlapgivespoint && result.fastestlap ? 1 : 0);
           points = basePoints + bonusPoints;
         }
@@ -579,11 +589,18 @@ export default function DriverStandingsPage() {
                     </TableCell>
                     <TableCell className="py-4 px-6">
                       <div className="flex items-center">
-                        {driver.teamLogo ? (
-                          <img src={driver.teamLogo} alt={`${driver.teamName} logo`} className="w-8 h-8 object-contain bg-black/10 dark:bg-transparent rounded-lg p-1" />
-                        ) : (
-                          <span className="inline-block w-8 h-8 bg-gray-200 dark:bg-muted rounded-full flex-shrink-0" />
-                        )}
+                        {(() => {
+                          const isRB = driver.teamName === 'RB';
+                          const isStakeF1 = driver.teamName === 'Stake F1 Team';
+                          const logoSize = (isRB || isStakeF1) ? 'w-10 h-10' : 'w-8 h-8';
+                          const fallbackSize = (isRB || isStakeF1) ? 'w-10 h-10' : 'w-8 h-8';
+                          
+                          return driver.teamLogo ? (
+                            <img src={driver.teamLogo} alt={`${driver.teamName} logo`} className={`${logoSize} object-contain bg-black/10 dark:bg-transparent rounded-lg p-1`} />
+                          ) : (
+                            <span className={`inline-block ${fallbackSize} bg-gray-200 dark:bg-muted rounded-full flex-shrink-0`} />
+                          );
+                        })()}
                       </div>
                     </TableCell>
                     <TableCell className="py-4 px-6">
@@ -607,7 +624,7 @@ export default function DriverStandingsPage() {
               </div>
             </CardHeader>
             <CardContent className="p-2 sm:px-3 sm:pt-3 sm:pb-0">
-              <ChartContainer config={chartConfig} className="w-full h-[520px]">
+              <ChartContainer config={chartConfig} className="w-full h-[320px]">
                 <LineChart accessibilityLayer data={chartData} margin={{ left: 8, right: 8, top: 6, bottom: 0 }}>
                   <CartesianGrid vertical={false} />
                   <XAxis
@@ -657,11 +674,13 @@ export default function DriverStandingsPage() {
                               {payload.map((entry: any, index: number) => {
                                 const driverName = entry.dataKey;
                                 const color = chartConfig[driverName]?.color || entry.color;
+                                // Use the chart data value which represents cumulative points at this race
+                                const displayPoints = entry.value;
                                 return (
                                   <div key={index} className="flex items-center gap-2 text-sm">
                                     <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
                                     <span className="font-medium">{driverName}</span>
-                                    <span className="text-muted-foreground">{entry.value} points</span>
+                                    <span className="text-muted-foreground">{displayPoints} points</span>
                                   </div>
                                 );
                               })}
@@ -688,211 +707,14 @@ export default function DriverStandingsPage() {
             </CardContent>
           </Card>
 
-          
-
-          {/* Driver Stats Bar Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Driver Stats</CardTitle>
-              <CardDescription>Wins (1st), podiums (2nd-3rd), points finishes (1st-10th), pole positions, and DNFs</CardDescription>
-            </CardHeader>
-            <CardContent className="p-2 sm:px-3 sm:pt-3 sm:pb-0">
-              <ChartContainer config={statsChartConfig} className="w-full h-[560px]">
-                <BarChart accessibilityLayer data={statsData} margin={{ left: 16, right: 16, top: 10, bottom: 8 }} barCategoryGap="20%" barGap={2}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="driverName"
-                    tickLine={false}
-                    tickMargin={10}
-                    axisLine={false}
-                    height={40}
-                    interval={0}
-                    tick={(props: any) => {
-                      const { x, y, payload } = props;
-                      const name = (payload.value as string) || '';
-                      const initials = name.substring(0, 3).toUpperCase();
-                      return (
-                        <g transform={`translate(${x},${y})`}>
-                          <text
-                            x={0}
-                            y={0}
-                            dy={16}
-                            textAnchor="middle"
-                            fill="#666"
-                            fontSize="12"
-                            fontWeight={600}
-                          >
-                            {initials}
-                          </text>
-                        </g>
-                      );
-                    }}
-                  />
-                  <YAxis tickLine={false} axisLine={false} />
-                  <ChartTooltip
-                    content={({ active, payload, label }) => {
-                      if (active && payload && payload.length && label) {
-                        const d = statsData.find((s) => s.driverName === label);
-                        return (
-                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                            <div className="flex items-center gap-2 mb-2">
-                              {d?.teamLogo && (
-                                <img src={d.teamLogo} alt={`${label} team logo`} className="w-5 h-5 object-contain bg-black/10 dark:bg-transparent rounded p-0.5" />
-                              )}
-                              <p className="font-medium text-sm">{label}</p>
-                            </div>
-                            <p className="text-xs text-muted-foreground mb-2">Season statistics</p>
-                            <div className="space-y-1">
-                              {[
-                                { key: 'pointsFinishes', label: 'Points Finishes (1st-10th, incl. wins & podiums)' },
-                                { key: 'podiums', label: 'Podiums (2nd-3rd)' },
-                                { key: 'wins', label: 'Wins (1st)' },
-                                { key: 'poles', label: 'Poles' },
-                                { key: 'dnfs', label: 'DNFs' },
-                              ].map((stat, idx) => {
-                                const entry = payload.find((p: any) => p.dataKey === stat.key);
-                                const value = entry?.value || 0;
-                                const colors = getTeamColorVariations(d?.teamName || '');
-                                const color = (colors as any)[stat.key] || '#999';
-                                return (
-                                  <div key={idx} className="flex items-center gap-2 text-sm">
-                                    <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
-                                    <span>{stat.label}</span>
-                                    <span className="ml-auto font-medium">{value}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                    cursor={{ fill: 'rgba(0, 0, 0, 0.1)' }}
-                  />
-                  {/* Points Finishes */}
-                  <Bar dataKey="pointsFinishes" radius={[2, 2, 0, 0]} shape={(p: any) => {
-                    const teamColors = getTeamColorVariations(p.payload?.teamName);
-                    const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
-                    const r = Array.isArray(radius) ? radius[0] : (radius || 0);
-                    return (
-                      <rect
-                        x={x}
-                        y={y}
-                        width={width}
-                        height={height}
-                        rx={r}
-                        ry={r}
-                        fill={teamColors.pointsFinishes}
-                        onMouseEnter={onMouseEnter}
-                        onMouseLeave={onMouseLeave}
-                        onMouseMove={onMouseMove}
-                        onClick={onClick}
-                      />
-                    );
-                  }} />
-                  {/* Podiums */}
-                  <Bar dataKey="podiums" radius={[2, 2, 0, 0]} shape={(p: any) => {
-                    const teamColors = getTeamColorVariations(p.payload?.teamName);
-                    const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
-                    const r = Array.isArray(radius) ? radius[0] : (radius || 0);
-                    return (
-                      <rect
-                        x={x}
-                        y={y}
-                        width={width}
-                        height={height}
-                        rx={r}
-                        ry={r}
-                        fill={teamColors.podiums}
-                        onMouseEnter={onMouseEnter}
-                        onMouseLeave={onMouseLeave}
-                        onMouseMove={onMouseMove}
-                        onClick={onClick}
-                      />
-                    );
-                  }} />
-                  {/* Wins */}
-                  <Bar dataKey="wins" radius={[2, 2, 0, 0]} shape={(p: any) => {
-                    const teamColors = getTeamColorVariations(p.payload?.teamName);
-                    const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
-                    const r = Array.isArray(radius) ? radius[0] : (radius || 0);
-                    return (
-                      <rect
-                        x={x}
-                        y={y}
-                        width={width}
-                        height={height}
-                        rx={r}
-                        ry={r}
-                        fill={teamColors.wins}
-                        onMouseEnter={onMouseEnter}
-                        onMouseLeave={onMouseLeave}
-                        onMouseMove={onMouseMove}
-                        onClick={onClick}
-                      />
-                    );
-                  }} />
-                  {/* Poles */}
-                  <Bar dataKey="poles" radius={[2, 2, 0, 0]} shape={(p: any) => {
-                    const teamColors = getTeamColorVariations(p.payload?.teamName);
-                    const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
-                    const r = Array.isArray(radius) ? radius[0] : (radius || 0);
-                    return (
-                      <rect
-                        x={x}
-                        y={y}
-                        width={width}
-                        height={height}
-                        rx={r}
-                        ry={r}
-                        fill={teamColors.poles}
-                        onMouseEnter={onMouseEnter}
-                        onMouseLeave={onMouseLeave}
-                        onMouseMove={onMouseMove}
-                        onClick={onClick}
-                      />
-                    );
-                  }} />
-                  {/* DNFs */}
-                  <Bar dataKey="dnfs" radius={[2, 2, 0, 0]} shape={(p: any) => {
-                    const teamColors = getTeamColorVariations(p.payload?.teamName);
-                    const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
-                    const r = Array.isArray(radius) ? radius[0] : (radius || 0);
-                    return (
-                      <rect
-                        x={x}
-                        y={y}
-                        width={width}
-                        height={height}
-                        rx={r}
-                        ry={r}
-                        fill={teamColors.dnfs}
-                        onMouseEnter={onMouseEnter}
-                        onMouseLeave={onMouseLeave}
-                        onMouseMove={onMouseMove}
-                        onClick={onClick}
-                      />
-                    );
-                  }} />
-                </BarChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
-
-          
-        </div>
-
-        {/* Bottom row using full width: Points Distribution and Driver Ranking Evolution */}
-        <div className="xl:col-span-12 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Points Distribution by Track (Horizontal Stacked Bars) */}
+          {/* Points Distribution Chart */}
           <Card>
             <CardHeader>
               <CardTitle>Points Distribution</CardTitle>
               <CardDescription>Split of points earned by each driver per track (horizontal stacked bars)</CardDescription>
             </CardHeader>
             <CardContent className="p-1 sm:px-2 sm:pt-2 sm:pb-0">
-              <ChartContainer config={chartConfig} className="w-full" style={{ height: Math.max(520, distributionData.length * 40) }}>
+              <ChartContainer config={chartConfig} className="w-full" style={{ height: Math.max(800, distributionData.length * 60) }}>
                 <BarChart accessibilityLayer data={distributionData} layout="vertical" margin={{ left: 0, right: 16, top: 6, bottom: 0 }}>
                   <CartesianGrid horizontal={true} vertical={false} strokeDasharray="3 3" />
                   <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 12 }} domain={[0, 'auto']} allowDataOverflow height={20} />
@@ -966,6 +788,11 @@ export default function DriverStandingsPage() {
               </ChartContainer>
             </CardContent>
           </Card>
+
+        </div>
+
+        {/* Bottom row using full width: Driver Ranking Evolution */}
+        <div className="xl:col-span-12">
 
           {/* Driver Ranking Evolution Chart */}
           <Card>
@@ -1061,6 +888,198 @@ export default function DriverStandingsPage() {
                     />
                   ))}
                 </LineChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Driver Stats Bar Chart - Full Width Row */}
+        <div className="xl:col-span-12 mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Driver Stats</CardTitle>
+              <CardDescription>Wins (1st), podiums (2nd-3rd), points finishes (1st-10th), pole positions, and DNFs</CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 sm:px-6 sm:pt-6 sm:pb-4">
+              <ChartContainer config={statsChartConfig} className="w-full h-[600px]">
+                <BarChart accessibilityLayer data={statsData} margin={{ left: 20, right: 20, top: 20, bottom: 20 }} barCategoryGap="15%" barGap={4}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="driverName"
+                    tickLine={false}
+                    tickMargin={12}
+                    axisLine={false}
+                    height={50}
+                    interval={0}
+                    tick={(props: any) => {
+                      const { x, y, payload } = props;
+                      const name = (payload.value as string) || '';
+                      const initials = name.substring(0, 3).toUpperCase();
+                      return (
+                        <g transform={`translate(${x},${y})`}>
+                          <text
+                            x={0}
+                            y={0}
+                            dy={16}
+                            textAnchor="middle"
+                            fill="#666"
+                            fontSize="13"
+                            fontWeight={600}
+                          >
+                            {initials}
+                          </text>
+                        </g>
+                      );
+                    }}
+                  />
+                  <YAxis tickLine={false} axisLine={false} />
+                  <ChartTooltip
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length && label) {
+                        const d = statsData.find((s) => s.driverName === label);
+                        return (
+                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              {d?.teamLogo && (
+                                <img src={d.teamLogo} alt={`${label} team logo`} className="w-5 h-5 object-contain bg-black/10 dark:bg-transparent rounded p-0.5" />
+                              )}
+                              <p className="font-medium text-sm">{label}</p>
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-2">Season statistics</p>
+                            <div className="space-y-1">
+                              {[
+                                { key: 'pointsFinishes', label: 'Points Finishes (1st-10th, incl. wins & podiums)' },
+                                { key: 'podiums', label: 'Podiums (2nd-3rd)' },
+                                { key: 'wins', label: 'Wins (1st)' },
+                                { key: 'poles', label: 'Poles' },
+                                { key: 'dnfs', label: 'DNFs' },
+                              ].map((stat, idx) => {
+                                const entry = payload.find((p: any) => p.dataKey === stat.key);
+                                const value = entry?.value || 0;
+                                const colors = getTeamColorVariations(d?.teamName || '');
+                                const color = (colors as any)[stat.key] || '#999';
+                                return (
+                                  <div key={idx} className="flex items-center gap-2 text-sm">
+                                    <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
+                                    <span>{stat.label}</span>
+                                    <span className="ml-auto font-medium">{value}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                    cursor={{ fill: 'rgba(0, 0, 0, 0.1)' }}
+                  />
+                  {/* Points Finishes */}
+                  <Bar dataKey="pointsFinishes" radius={[4, 4, 0, 0]} shape={(p: any) => {
+                    const teamColors = getTeamColorVariations(p.payload?.teamName);
+                    const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
+                    const r = Array.isArray(radius) ? radius[0] : (radius || 0);
+                    return (
+                      <rect
+                        x={x}
+                        y={y}
+                        width={width}
+                        height={height}
+                        rx={r}
+                        ry={r}
+                        fill={teamColors.pointsFinishes}
+                        onMouseEnter={onMouseEnter}
+                        onMouseLeave={onMouseLeave}
+                        onMouseMove={onMouseMove}
+                        onClick={onClick}
+                      />
+                    );
+                  }} />
+                  {/* Podiums */}
+                  <Bar dataKey="podiums" radius={[4, 4, 0, 0]} shape={(p: any) => {
+                    const teamColors = getTeamColorVariations(p.payload?.teamName);
+                    const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
+                    const r = Array.isArray(radius) ? radius[0] : (radius || 0);
+                    return (
+                      <rect
+                        x={x}
+                        y={y}
+                        width={width}
+                        height={height}
+                        rx={r}
+                        ry={r}
+                        fill={teamColors.podiums}
+                        onMouseEnter={onMouseEnter}
+                        onMouseLeave={onMouseLeave}
+                        onMouseMove={onMouseMove}
+                        onClick={onClick}
+                      />
+                    );
+                  }} />
+                  {/* Wins */}
+                  <Bar dataKey="wins" radius={[4, 4, 0, 0]} shape={(p: any) => {
+                    const teamColors = getTeamColorVariations(p.payload?.teamName);
+                    const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
+                    const r = Array.isArray(radius) ? radius[0] : (radius || 0);
+                    return (
+                      <rect
+                        x={x}
+                        y={y}
+                        width={width}
+                        height={height}
+                        rx={r}
+                        ry={r}
+                        fill={teamColors.wins}
+                        onMouseEnter={onMouseEnter}
+                        onMouseLeave={onMouseLeave}
+                        onMouseMove={onMouseMove}
+                        onClick={onClick}
+                      />
+                    );
+                  }} />
+                  {/* Poles */}
+                  <Bar dataKey="poles" radius={[4, 4, 0, 0]} shape={(p: any) => {
+                    const teamColors = getTeamColorVariations(p.payload?.teamName);
+                    const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
+                    const r = Array.isArray(radius) ? radius[0] : (radius || 0);
+                    return (
+                      <rect
+                        x={x}
+                        y={y}
+                        width={width}
+                        height={height}
+                        rx={r}
+                        ry={r}
+                        fill={teamColors.poles}
+                        onMouseEnter={onMouseEnter}
+                        onMouseLeave={onMouseLeave}
+                        onMouseMove={onMouseMove}
+                        onClick={onClick}
+                      />
+                    );
+                  }} />
+                  {/* DNFs */}
+                  <Bar dataKey="dnfs" radius={[4, 4, 0, 0]} shape={(p: any) => {
+                    const teamColors = getTeamColorVariations(p.payload?.teamName);
+                    const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
+                    const r = Array.isArray(radius) ? radius[0] : (radius || 0);
+                    return (
+                      <rect
+                        x={x}
+                        y={y}
+                        width={width}
+                        height={height}
+                        rx={r}
+                        ry={r}
+                        fill={teamColors.dnfs}
+                        onMouseEnter={onMouseEnter}
+                        onMouseLeave={onMouseLeave}
+                        onMouseMove={onMouseMove}
+                        onClick={onClick}
+                      />
+                    );
+                  }} />
+                </BarChart>
               </ChartContainer>
             </CardContent>
           </Card>

@@ -21,11 +21,10 @@ import {
   ChartContainer,
   ChartTooltip,
 } from "@/components/ui/chart";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, LineChart, Line, Label, Sector, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Label } from "recharts";
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip as ChartJSTooltip, Legend } from 'chart.js';
 import { SankeyController, Flow } from 'chartjs-chart-sankey';
 import { Chart } from 'react-chartjs-2';
-import { PieSectorDataItem } from "recharts/types/polar/Pie";
 import { IconTrophy, IconMedal, IconTarget } from "@tabler/icons-react";
 
 // Register Chart.js components
@@ -74,7 +73,7 @@ interface DriverStats {
     nodes: Array<{ name: string }>;
     links: Array<{ source: number; target: number; value: number }>;
   };
-  lapsLed: any[];
+  lapsLed: unknown[];
   teamColors?: {
     primary: string;
     secondary: string;
@@ -82,11 +81,6 @@ interface DriverStats {
   };
 }
 
-function extractImageUrl(htmlString: string): string {
-  if (!htmlString) return "";
-  const match = htmlString.match(/src="([^"]+)"/);
-  return match ? match[1] : "";
-}
 
 
 const COLORS = {
@@ -110,7 +104,6 @@ export default function DriverStatsPage() {
   const [selectedDriver, setSelectedDriver] = useState<string>("");
   const [driverStats, setDriverStats] = useState<DriverStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tracks, setTracks] = useState<any[]>([]);
   const [themeKey, setThemeKey] = useState(0);
 
   useEffect(() => {
@@ -163,17 +156,19 @@ export default function DriverStatsPage() {
         throw new Error('Failed to fetch data');
       }
 
-      setTracks(tracksData);
       
       // Process drivers with team info
-      const teamMap = new Map(teamsData.map((t: any) => [t.id, t]));
-      const processedDrivers = driversData.map((d: any) => {
-        const team = teamMap.get(d.team);
+      const teamMap = new Map(teamsData.map((t: Record<string, unknown>) => [t.id as string, t]));
+      
+      // Create selected track map for event type lookup
+      const selectedTrackMap = new Map(selectedTracks.map((st: Record<string, unknown>) => [st.id as string, st]));
+      const processedDrivers = driversData.map((d: Record<string, unknown>) => {
+        const team = teamMap.get(d.team as string);
         return {
-          id: d.id,
-          name: d.name,
-          team: team?.name || 'Unknown',
-          points: d.points || 0,
+          id: d.id as string,
+          name: d.name as string,
+          team: (team as Record<string, unknown>)?.name as string || 'Unknown',
+          points: (d.points as number) || 0,
         };
       }).sort((a, b) => b.points - a.points);
 
@@ -211,9 +206,11 @@ export default function DriverStatsPage() {
 
       if (!results || !teamsData || !tracksData || !selectedTracks || !rules || !driverData) return;
 
-      const teamMap = new Map(teamsData.map((t: any) => [t.id, t]));
-      const trackMap = new Map(tracksData.map((t: any) => [t.id, t.name]));
-      const selectedTrackMap = new Map(selectedTracks.map((st: any) => [st.id, st]));
+      const teamMap = new Map(teamsData.map((t: Record<string, unknown>) => [t.id as string, t]));
+      const trackMap = new Map(tracksData.map((t: Record<string, unknown>) => [t.id as string, t.name as string]));
+      
+      // Create selected track map for event type lookup
+      const selectedTrackMap = new Map(selectedTracks.map((st: Record<string, unknown>) => [st.id as string, st]));
       
       // Team color mapping
       const teamColorMap: { [key: string]: string } = {
@@ -255,34 +252,44 @@ export default function DriverStatsPage() {
       const teamColors = getTeamColorVariations(teamName);
 
       // Process race results
-      const raceResults: RaceResult[] = results.map((result: any) => {
-        const team = teamMap.get(result.team || '');
-        const trackName = trackMap.get(result.track) || 'Unknown';
+      const raceResults: RaceResult[] = results.map((result: Record<string, unknown>) => {
+        const team = teamMap.get((result.team as string) || '');
+        const trackName = trackMap.get(result.track as string) || 'Unknown';
         
         // Calculate points with rules
         const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+        const sprintPointsMapping = [8, 7, 6, 5, 4, 3, 2, 1];
         let points = 0;
         if (result.racefinished) {
-          const pos = result.finishing_position ?? result.position;
-          const basePoints = pos <= 10 ? racePointsMapping[(pos || 0) - 1] : 0;
-          const bonusPoints = (rules.polegivespoint && result.pole ? 1 : 0) + (rules.fastestlapgivespoint && result.fastestlap ? 1 : 0);
+          const pos = (result.finishing_position as number) ?? (result.position as number);
+          
+          // Determine event type from track
+          const selectedTrack = selectedTrackMap.get(result.track as string);
+          const eventType = selectedTrack?.type || 'Race';
+          
+          // Choose appropriate points mapping
+          const pointsMapping = eventType === 'Sprint' ? sprintPointsMapping : racePointsMapping;
+          const maxPositions = eventType === 'Sprint' ? 8 : 10;
+          
+          const basePoints = pos <= maxPositions ? pointsMapping[(pos || 0) - 1] : 0;
+          const bonusPoints = ((rules as Record<string, unknown>).polegivespoint && result.pole ? 1 : 0) + ((rules as Record<string, unknown>).fastestlapgivespoint && result.fastestlap ? 1 : 0);
           points = basePoints + bonusPoints;
         }
 
         return {
-          track: result.track,
+          track: result.track as string,
           trackName,
-          date: result.date || '',
-          position: result.finishing_position ?? result.position,
-          driver: result.driver,
+          date: (result.date as string) || '',
+          position: (result.finishing_position as number) ?? (result.position as number),
+          driver: result.driver as string,
           driverName: 'Driver', // Will be filled from driver data
-          teamId: result.team || '',
-          teamName: team?.name || 'Unknown',
+          teamId: (result.team as string) || '',
+          teamName: (team as Record<string, unknown>)?.name as string || 'Unknown',
           points,
-          pole: result.pole || false,
-          fastestlap: result.fastestlap || false,
+          pole: (result.pole as boolean) || false,
+          fastestlap: (result.fastestlap as boolean) || false,
           racefinished: result.racefinished !== false,
-          qualified_position: result.qualified_position
+          qualified_position: result.qualified_position as number
         };
       });
 
@@ -374,7 +381,6 @@ export default function DriverStatsPage() {
      }
    };
 
-  const selectedDriverData = drivers.find((d: Driver) => d.id === selectedDriver);
 
   if (loading) {
     return (
@@ -387,8 +393,6 @@ export default function DriverStatsPage() {
     );
   }
 
-  // Prepare chart data for radial chart - each ring represents a different category
-  const totalRaces = driverStats?.totalRaces || 1; // Avoid division by zero
   
   // Calculate categories (these can overlap - a win is also a podium and points finish)
   const wins = driverStats?.wins || 0;
@@ -538,8 +542,8 @@ export default function DriverStatsPage() {
          </Card>
        </div>
 
-               {/* Main charts - 3 columns */}
-       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 items-stretch">
+               {/* Main charts - 2 columns */}
+       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 items-stretch">
          {/* Season Performance Chart */}
          <Card>
            <CardHeader>
@@ -685,55 +689,6 @@ export default function DriverStatsPage() {
              </div>
            </CardContent>
          </Card>
-
-         {/* Finish Positions Distribution Bar Chart */}
-         <Card>
-           <CardHeader>
-             <CardTitle>Finish Positions Distribution</CardTitle>
-             <CardDescription>Count of finishes for each position</CardDescription>
-           </CardHeader>
-           <CardContent>
-              <div className="w-full h-[260px] sm:h-[300px] md:h-[350px]">
-               <ResponsiveContainer width="100%" height="100%">
-                 <BarChart data={finishPositionsData} margin={{ left: 12, right: 12, top: 0, bottom: 0 }}>
-                   <CartesianGrid strokeDasharray="3 3" />
-                   <XAxis
-                     dataKey="position"
-                     tickMargin={6}
-                     padding={{ left: isSmallScreen ? 6 : 12, right: isSmallScreen ? 6 : 12 }}
-                     tickLine={false}
-                     axisLine={false}
-                   />
-                   <YAxis
-                     hide={false}
-                     mirror={false}
-                     tickMargin={6}
-                     tickLine={false}
-                     axisLine={false}
-                     width={32}
-                     tickCount={5}
-                     domain={[0, 'dataMax']}
-                     allowDecimals={false}
-                   />
-                   <Bar dataKey="count" fill={driverStats?.teamColors?.primary || COLORS.primary} />
-                   <ChartTooltip
-                     content={({ active, payload, label }) => {
-                       if (active && payload && payload.length) {
-                         return (
-                           <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                             <p className="font-medium">{label}</p>
-                             <p className="text-muted-foreground">{payload[0].value} finishes</p>
-                           </div>
-                         );
-                       }
-                       return null;
-                     }}
-                   />
-                 </BarChart>
-               </ResponsiveContainer>
-             </div>
-           </CardContent>
-         </Card>
        </div>
 
         
@@ -801,44 +756,19 @@ export default function DriverStatsPage() {
                        display: false
                      },
                      tooltip: {
-                       backgroundColor: function(context: any) {
-                         // Check if we're in dark mode by looking at document class or CSS variables
-                         const isDark = document.documentElement.classList.contains('dark') || 
-                                       getComputedStyle(document.documentElement).getPropertyValue('--background').includes('0 0% 3.9%');
-                         return isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-                       },
-                       titleColor: function(context: any) {
-                         const isDark = document.documentElement.classList.contains('dark') || 
-                                       getComputedStyle(document.documentElement).getPropertyValue('--background').includes('0 0% 3.9%');
-                         return isDark ? 'white' : 'black';
-                       },
-                       bodyColor: function(context: any) {
-                         const isDark = document.documentElement.classList.contains('dark') || 
-                                       getComputedStyle(document.documentElement).getPropertyValue('--background').includes('0 0% 3.9%');
-                         return isDark ? 'white' : 'black';
-                       },
+                       backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                       titleColor: 'white',
+                       bodyColor: 'white',
                        borderColor: (driverStats?.teamColors?.primary || COLORS.primary),
                        borderWidth: 2,
                        cornerRadius: 8,
                        displayColors: false,
                        callbacks: {
-                         title: function(context: any) {
-                           const dataIndex = context[0]?.dataIndex;
-                           if (dataIndex !== undefined && driverStats?.startToFinishFlow?.links[dataIndex]) {
-                             const link = driverStats.startToFinishFlow.links[dataIndex];
-                             const fromNode = driverStats.startToFinishFlow.nodes[link.source]?.name?.replace('Start P', 'Starting P');
-                             const toNode = driverStats.startToFinishFlow.nodes[link.target]?.name?.replace('Finish P', 'Finishing P');
-                             return `${fromNode} → ${toNode}`;
-                           }
-                           return '';
+                         title: function() {
+                           return 'Position Flow';
                          },
-                         label: function(context: any) {
-                           const dataIndex = context.dataIndex;
-                           if (dataIndex !== undefined && driverStats?.startToFinishFlow?.links[dataIndex]) {
-                             const flow = driverStats.startToFinishFlow.links[dataIndex].value;
-                             return `${flow} race${flow !== 1 ? 's' : ''}`;
-                           }
-                           return '';
+                         label: function() {
+                           return 'Race flow data';
                          }
                        }
                      }
@@ -855,6 +785,61 @@ export default function DriverStatsPage() {
                <p className="text-sm">Qualifying results are needed to show the flow diagram</p>
              </div>
            )}
+         </CardContent>
+       </Card>
+
+       {/* Finish Positions Distribution Bar Chart - Full Width */}
+       <Card className="mt-6">
+         <CardHeader>
+           <CardTitle>Finish Positions Distribution</CardTitle>
+           <CardDescription>Count of finishes for each position</CardDescription>
+         </CardHeader>
+         <CardContent>
+            <div className="w-full h-[400px] sm:h-[450px] md:h-[500px]">
+             <ResponsiveContainer width="100%" height="100%">
+               <BarChart data={finishPositionsData} margin={{ left: 20, right: 20, top: 20, bottom: 20 }}>
+                 <CartesianGrid strokeDasharray="3 3" />
+                 <XAxis
+                   dataKey="position"
+                   tickMargin={8}
+                   padding={{ left: 20, right: 20 }}
+                   tickLine={false}
+                   axisLine={false}
+                   fontSize={12}
+                 />
+                 <YAxis
+                   hide={false}
+                   mirror={false}
+                   tickMargin={8}
+                   tickLine={false}
+                   axisLine={false}
+                   width={40}
+                   tickCount={6}
+                   domain={[0, 'dataMax']}
+                   allowDecimals={false}
+                   fontSize={12}
+                 />
+                 <Bar 
+                   dataKey="count" 
+                   fill={driverStats?.teamColors?.primary || COLORS.primary}
+                   radius={[4, 4, 0, 0]}
+                 />
+                 <ChartTooltip
+                   content={({ active, payload, label }) => {
+                     if (active && payload && payload.length) {
+                       return (
+                         <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                           <p className="font-medium">{label}</p>
+                           <p className="text-muted-foreground">{payload[0].value} finishes</p>
+                         </div>
+                       );
+                     }
+                     return null;
+                   }}
+                 />
+               </BarChart>
+             </ResponsiveContainer>
+           </div>
          </CardContent>
        </Card>
      </div>
