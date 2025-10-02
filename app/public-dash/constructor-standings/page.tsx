@@ -279,13 +279,13 @@ export default function ConstructorStandingsPage() {
            stats.wins++;
            console.log(`WIN recorded for ${stats.teamName}: driver ${result.driverName} position ${posForStats}`);
          }
-         // Count podiums (2nd and 3rd positions only - not including wins)
-         else if (posForStats === 2 || posForStats === 3) {
+         // Count podiums (1st, 2nd, and 3rd positions - wins are included in podiums)
+         if (posForStats === 1 || posForStats === 2 || posForStats === 3) {
            stats.podiums++;
            console.log(`PODIUM recorded for ${stats.teamName}: driver ${result.driverName} position ${posForStats}`);
          }
-         // Count points finishes (4th-10th positions only - not including wins or podiums)
-         else if (posForStats >= 4 && posForStats <= 10) {
+         // Count points finishes (1st-10th positions - all points-scoring positions)
+         if (posForStats >= 1 && posForStats <= 10) {
            stats.pointsFinishes++;
            console.log(`POINTS FINISH recorded for ${stats.teamName}: driver ${result.driverName} position ${posForStats}`);
          }
@@ -303,8 +303,8 @@ export default function ConstructorStandingsPage() {
        const structuredStatsArray = statsArray.map(stats => ({
          ...stats,
          // Keep individual values - Recharts will handle the stacking visually
-         pointsFinishes: stats.pointsFinishes, // 4th-10th only
-         podiums: stats.podiums, // 2nd-3rd only  
+         pointsFinishes: stats.pointsFinishes, // 1st-10th (all points-scoring positions)
+         podiums: stats.podiums, // 1st-3rd (including wins)  
          wins: stats.wins, // 1st only
          poles: stats.poles, // poles only
          dnfs: stats.dnfs // dnfs only
@@ -480,7 +480,8 @@ export default function ConstructorStandingsPage() {
             date: raceData.date
           };
           
-          // Add position for each team
+          // For the first race, all teams start at their natural positions
+          // For subsequent races, positions reflect the cumulative standings
           raceStandings.forEach((standing, position) => {
             rankingPoint[standing.teamName] = position + 1; // Position 1, 2, 3, etc.
           });
@@ -538,7 +539,7 @@ export default function ConstructorStandingsPage() {
       color: "hsl(210, 100%, 65%)", // Default fallback
     },
     pointsFinishes: {
-      label: "Points finishes (4th-10th)",
+      label: "Points finishes (1st-10th)",
       color: "hsl(145, 85%, 55%)", // Default fallback
     },
     poles: {
@@ -1017,7 +1018,7 @@ export default function ConstructorStandingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Stats</CardTitle>
-            <CardDescription>Wins (1st), podiums (2nd-3rd), points finishes (4th-10th), pole positions, and DNFs by team</CardDescription>
+            <CardDescription>Wins (1st), podiums (1st-3rd), points finishes (1st-10th), pole positions, and DNFs by team</CardDescription>
           </CardHeader>
           <CardContent className="p-4 sm:px-6 sm:pt-6 sm:pb-4">
             <ChartContainer config={statsChartConfig} className="w-full h-[600px]">
@@ -1077,8 +1078,8 @@ export default function ConstructorStandingsPage() {
                           <p className="text-xs text-muted-foreground mb-2">Season statistics</p>
                           <div className="space-y-1">
                             {[
-                              { key: 'pointsFinishes', label: 'Points Finishes (4th-10th)' },
-                              { key: 'podiums', label: 'Podiums (2nd-3rd)' },
+                              { key: 'pointsFinishes', label: 'Points Finishes (1st-10th)' },
+                              { key: 'podiums', label: 'Podiums (1st-3rd)' },
                               { key: 'wins', label: 'Wins (1st)' },
                               { key: 'poles', label: 'Poles' },
                               { key: 'dnfs', label: 'DNFs' },

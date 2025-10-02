@@ -215,7 +215,8 @@ export default function DriverStandingsPage() {
         // Points finishes include all finishes from 1st to 10th (including wins and podiums)
         if (res.position >= 1 && res.position <= 10) stats.pointsFinishes++;
         if (res.position === 1) stats.wins++;
-        else if (res.position === 2 || res.position === 3) stats.podiums++;
+        // Podiums include P1, P2, P3 (so wins are included in podiums)
+        if (res.position === 1 || res.position === 2 || res.position === 3) stats.podiums++;
       });
 
       const statsArray = Array.from(driverStats.values())
@@ -308,20 +309,25 @@ export default function DriverStandingsPage() {
 
       // Ranking evolution
       const rankingDataArray: any[] = [];
-      chartDataArray.forEach((raceData) => {
+      chartDataArray.forEach((raceData, raceIndex) => {
         const standings = driversData.map((d: any) => ({
           driverId: d.id,
           driverName: d.name,
           points: raceData[d.name] || 0,
         })).sort((a, b) => b.points - a.points);
+        
         const point: any = {
           race: raceData.race,
           raceIndex: raceData.raceIndex,
           date: raceData.date,
         };
+        
+        // For the first race, all drivers start at their natural positions
+        // For subsequent races, positions reflect the cumulative standings
         standings.forEach((s, pos) => {
           point[s.driverName] = pos + 1;
         });
+        
         rankingDataArray.push(point);
       });
       setRankingData(rankingDataArray);
@@ -898,7 +904,7 @@ export default function DriverStandingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Driver Stats</CardTitle>
-              <CardDescription>Wins (1st), podiums (2nd-3rd), points finishes (1st-10th), pole positions, and DNFs</CardDescription>
+              <CardDescription>Wins (1st), podiums (1st-3rd), points finishes (1st-10th), pole positions, and DNFs</CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:px-6 sm:pt-6 sm:pb-4">
               <ChartContainer config={statsChartConfig} className="w-full h-[600px]">
@@ -949,7 +955,7 @@ export default function DriverStandingsPage() {
                             <div className="space-y-1">
                               {[
                                 { key: 'pointsFinishes', label: 'Points Finishes (1st-10th, incl. wins & podiums)' },
-                                { key: 'podiums', label: 'Podiums (2nd-3rd)' },
+                                { key: 'podiums', label: 'Podiums (1st-3rd)' },
                                 { key: 'wins', label: 'Wins (1st)' },
                                 { key: 'poles', label: 'Poles' },
                                 { key: 'dnfs', label: 'DNFs' },

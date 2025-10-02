@@ -26,6 +26,15 @@ export default async function HomePage() {
   const { data: teamsData, error: teamsError } = await supabase
     .from('teams')
     .select('*');
+  const { data: results } = await supabase
+    .from('results')
+    .select('*');
+  const { data: schedules } = await supabase
+    .from('schedules')
+    .select('*');
+  const { data: selectedTracks } = await supabase
+    .from('selected_tracks')
+    .select('*, track(*)');
 
   if (driversError || teamsError) {
     return <div>Error loading data</div>;
@@ -45,18 +54,96 @@ export default async function HomePage() {
   const sortedDrivers = [...(drivers || [])].sort((a, b) => (b.points || 0) - (a.points || 0));
   const sortedTeams = [...teams].sort((a, b) => (b.constructorPoints || 0) - (a.constructorPoints || 0));
 
-  // MOCK: Previous order (for demo, shuffle the current order)
-  const prevDriverOrder = [...sortedDrivers].sort(() => Math.random() - 0.5).map(d => d.id);
-  const prevTeamOrder = [...sortedTeams].sort(() => Math.random() - 0.5).map(t => t.id);
+  // Calculate previous round standings for evolution comparison
+  const calculatePreviousStandings = () => {
+    if (!results || !schedules || !selectedTracks) return { prevDriverOrder: [], prevTeamOrder: [] };
+
+    const selectedTrackMap = new Map(selectedTracks.map((st: any) => [st.id, st]));
+    const sortedSchedules = schedules.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    // Find all completed rounds
+    const completedRounds = [];
+    for (const schedule of sortedSchedules) {
+      const selectedTrack = selectedTrackMap.get(schedule.track);
+      const raceResults = results.filter((r: any) => r.track === selectedTrack?.id);
+      if (raceResults.length > 0) {
+        completedRounds.push({ schedule, selectedTrack, raceResults });
+      }
+    }
+
+    // If we have less than 2 completed rounds, no evolution to show
+    if (completedRounds.length < 2) {
+      console.log(`Only ${completedRounds.length} completed rounds - showing blank evolution`);
+      return { prevDriverOrder: [], prevTeamOrder: [] };
+    }
+
+    console.log(`${completedRounds.length} completed rounds - calculating evolution`);
+
+    // Calculate standings after the previous round (excluding the latest round)
+    const prevDriverPoints = new Map();
+    const prevTeamPoints = new Map();
+
+    // Initialize all drivers and teams with 0 points
+    drivers.forEach((driver: any) => {
+      prevDriverPoints.set(driver.id, 0);
+    });
+    teams.forEach((team: any) => {
+      prevTeamPoints.set(team.id, 0);
+    });
+
+    // Add points from all rounds except the latest one
+    for (let i = 0; i < completedRounds.length - 1; i++) {
+      const round = completedRounds[i];
+      round.raceResults.forEach((result: any) => {
+        const currentDriverPoints = prevDriverPoints.get(result.driver) || 0;
+        prevDriverPoints.set(result.driver, currentDriverPoints + (result.points || 0));
+      });
+    }
+
+    // Calculate previous team standings based on driver points
+    teams.forEach((team: any) => {
+      const teamDrivers = drivers.filter((driver: any) => driver.team === team.id);
+      const teamPoints = teamDrivers.reduce((sum: number, driver: any) => {
+        return sum + (prevDriverPoints.get(driver.id) || 0);
+      }, 0);
+      prevTeamPoints.set(team.id, teamPoints);
+    });
+
+    // Create previous standings sorted by points
+    const prevDriverStandings = drivers.map((driver: any) => ({
+      id: driver.id,
+      points: prevDriverPoints.get(driver.id) || 0
+    })).sort((a, b) => b.points - a.points);
+
+    const prevTeamStandings = teams.map((team: any) => ({
+      id: team.id,
+      points: prevTeamPoints.get(team.id) || 0
+    })).sort((a, b) => b.points - a.points);
+
+    return {
+      prevDriverOrder: prevDriverStandings.map(d => d.id),
+      prevTeamOrder: prevTeamStandings.map(t => t.id)
+    };
+  };
+
+  const { prevDriverOrder, prevTeamOrder } = calculatePreviousStandings();
+
+  // Debug logging
+  console.log('Current driver order:', sortedDrivers.map(d => d.name));
+  console.log('Previous driver order:', prevDriverOrder.length > 0 ? prevDriverOrder.map(id => drivers.find(d => d.id === id)?.name) : 'No previous data');
+  console.log('Current team order:', sortedTeams.map(t => t.name));
+  console.log('Previous team order:', prevTeamOrder.length > 0 ? prevTeamOrder.map(id => teams.find(t => t.id === id)?.name) : 'No previous data');
 
   function getEvolution(currentIndex: number, prevIndex: number | undefined) {
+    // If no previous data (less than 2 rounds completed), show blank
     if (prevIndex === undefined) return { value: "—", color: "text-gray-400", icon: null };
+    
     const diff = prevIndex - currentIndex;
     if (diff > 0) {
-      return { value: `+${diff}`, color: "text-green-600", icon: <ArrowUp className="inline w-4 h-4" /> };
+      return { value: `↑+${diff}`, color: "text-green-600", icon: <ArrowUp className="inline w-4 h-4" /> };
     }
     if (diff < 0) {
-      return { value: `${diff}`, color: "text-red-600", icon: <ArrowDown className="inline w-4 h-4" /> };
+      return { value: `↓${diff}`, color: "text-red-600", icon: <ArrowDown className="inline w-4 h-4" /> };
     }
     return { value: "—", color: "text-gray-400", icon: null };
   }
