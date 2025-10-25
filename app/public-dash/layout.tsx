@@ -32,7 +32,7 @@ export default function AdminLayout({
           <SiteHeader />
           <Toaster position="top-center" />
           <KeyboardShortcuts />
-          <ShortcutHint />
+          {/* <ShortcutHint /> */}
           <main className="flex-1 overflow-auto pt-4">{children}</main>
         </SidebarInset>
       </SidebarProvider>
