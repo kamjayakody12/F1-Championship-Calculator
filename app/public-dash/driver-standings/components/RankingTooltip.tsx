@@ -1,5 +1,6 @@
 import { ChartConfig } from "@/components/ui/chart";
 import { Track } from "../hooks/types";
+import { brightenColor } from "../hooks/utils";
 
 interface RankingTooltipProps {
   active?: boolean;
@@ -33,6 +34,7 @@ export function RankingTooltip({
   if (!driverName) return null;
 
   const color = chartConfig[driverName]?.color || entry.color;
+  const brightColor = brightenColor(color);
 
   // Get track flag
   const trackName = (raceName as string).split(" (")[0];
@@ -51,13 +53,9 @@ export function RankingTooltip({
       </div>
       <p className="text-xs text-muted-foreground mb-2">Championship position</p>
       <div className="space-y-1">
-        <div className="flex items-center gap-2 text-sm">
-          <span
-            className="w-3 h-3 rounded-full"
-            style={{ backgroundColor: color }}
-          />
+        <div className="flex items-center justify-between gap-2 text-sm">
           <span className="font-medium">{driverName}</span>
-          <span className="ml-auto text-muted-foreground">P{entry.value}</span>
+          <span className="ml-auto" style={{ color: brightColor }}>P{entry.value}</span>
         </div>
       </div>
     </div>

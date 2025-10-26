@@ -1,5 +1,6 @@
 import { ChartConfig } from "@/components/ui/chart";
 import { Track } from "../hooks/types";
+import { brightenColor } from "../hooks/utils";
 
 interface DistributionTooltipProps {
   active?: boolean;
@@ -30,6 +31,7 @@ export function DistributionTooltip({
 
     const driverName = entry.dataKey as string;
     const color = chartConfig[driverName]?.color || entry.color;
+    const brightColor = brightenColor(color);
 
     return (
       <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
@@ -46,13 +48,9 @@ export function DistributionTooltip({
           Points earned at this track
         </p>
         <div className="space-y-1">
-          <div className="flex items-center gap-2 text-sm">
-            <span
-              className="w-3 h-3 rounded-sm"
-              style={{ backgroundColor: color }}
-            />
+          <div className="flex items-center justify-between gap-2 text-sm">
             <span className="font-medium">{driverName}</span>
-            <span className="ml-auto text-muted-foreground">
+            <span className="ml-auto" style={{ color: brightColor }}>
               {entry.value} pts
             </span>
           </div>
