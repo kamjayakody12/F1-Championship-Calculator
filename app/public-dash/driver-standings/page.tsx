@@ -126,6 +126,7 @@ export default function DriverStandingsPage() {
   const [activeDriver, setActiveDriver] = useState<string>("all");
   const [hoveredDistributionDriver, setHoveredDistributionDriver] = useState<string | null>(null);
   const [hoveredProgressionDriver, setHoveredProgressionDriver] = useState<string | null>(null);
+  const [hoveredRankingDriver, setHoveredRankingDriver] = useState<string | null>(null);
 
   // Fetch and process data on mount
   useEffect(() => {
@@ -621,30 +622,65 @@ export default function DriverStandingsPage() {
                     <ChartTooltip
                       cursor={true}
                       content={({ active, payload, label }) => {
-                        if (!active || !payload || !payload.length || !hoveredProgressionDriver) return null;
+                        if (!active || !payload || !payload.length) return null;
 
                         const raceData = chartData.find((d) => d.race === label);
                         const raceName = raceData ? raceData.race : label;
 
-                        // Only show the hovered driver
-                        const entry = payload.find((p: any) => p.dataKey === hoveredProgressionDriver);
-                        if (!entry) return null;
+                        // Get track flag
+                        const trackName = (raceName as string).split(' (')[0];
+                        const track = tracks.find((t) => t.name === trackName);
 
-                        const driverName = entry.dataKey as string;
-                        if (!driverName) return null;
-
-                        const color = chartConfig[driverName]?.color || entry.color;
+                        // Sort drivers by points at this race (descending)
+                        const sortedPayload = [...payload]
+                          .filter((p: any) => typeof p.value === 'number')
+                          .sort((a: any, b: any) => b.value - a.value);
 
                         return (
-                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                            <p className="font-medium text-sm mb-2">{raceName}</p>
+                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg max-h-[400px] overflow-y-auto">
+                            <div className="flex items-center gap-2 mb-2">
+                              {track?.img && (
+                                <div
+                                  className="w-6 h-4 flex items-center justify-center"
+                                  dangerouslySetInnerHTML={{ __html: track.img }}
+                                />
+                              )}
+                              <p className="font-medium text-sm">{trackName}</p>
+                            </div>
                             <p className="text-xs text-muted-foreground mb-2">Cumulative points</p>
                             <div className="space-y-1">
-                              <div className="flex items-center gap-2 text-sm">
-                                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                                <span className="font-medium">{driverName}</span>
-                                <span className="ml-auto text-muted-foreground">{entry.value} pts</span>
-                              </div>
+                              {sortedPayload.map((entry: any, index: number) => {
+                                const driverName = entry.dataKey as string;
+                                const color = chartConfig[driverName]?.color || entry.color;
+                                const isHovered = hoveredProgressionDriver === driverName;
+
+                                // Function to brighten HSL color for better readability
+                                const brightenColor = (hslColor: string) => {
+                                  const match = hslColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+                                  if (match) {
+                                    const h = match[1];
+                                    const s = match[2];
+                                    const l = Math.min(parseInt(match[3]) + 25, 75); // Increase lightness, cap at 75%
+                                    return `hsl(${h}, ${s}%, ${l}%)`;
+                                  }
+                                  return hslColor;
+                                };
+
+                                const brightColor = brightenColor(color);
+
+                                return (
+                                  <div
+                                    key={index}
+                                    className="flex items-center justify-between gap-2 text-sm"
+                                    style={{
+                                      fontWeight: isHovered ? 'bold' : 'normal'
+                                    }}
+                                  >
+                                    <span style={{ color: brightColor }}>{driverName}</span>
+                                    <span style={{ color: brightColor }}>{entry.value}</span>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         );
@@ -661,13 +697,10 @@ export default function DriverStandingsPage() {
                           dataKey={d.name}
                           type="monotone"
                           stroke={activeDriver === "all" || activeDriver === d.name ? lineColor : "transparent"}
-                          strokeWidth={
-                            isHovered ? 6 :
-                              activeDriver === d.name ? 3 : 2
-                          }
+                          strokeWidth={isHovered ? 4 : 2}
                           strokeOpacity={isOtherHovered ? 0.15 : 1}
                           dot={(activeDriver === "all" || activeDriver === d.name) ? {
-                            r: 5,
+                            r: 4,
                             strokeWidth: 2,
                             stroke: lineColor,
                             fill: lineColor,
@@ -676,11 +709,10 @@ export default function DriverStandingsPage() {
                             style: { cursor: 'pointer' }
                           } : false}
                           activeDot={{
-                            r: isHovered ? 10 : 5,
+                            r: isHovered ? 8 : 4,
                             strokeWidth: 2,
                             stroke: lineColor,
                             fill: lineColor,
-                            fillOpacity: isHovered ? 0.4 : 1,
                             onMouseEnter: () => setHoveredProgressionDriver(d.name),
                             onMouseLeave: () => setHoveredProgressionDriver(null),
                           }}
@@ -771,25 +803,61 @@ export default function DriverStandingsPage() {
                   <ChartTooltip
                     content={({ active, payload, label }) => {
                       if (!active || !payload || !payload.length) return null;
-                      const entries = hoveredDistributionDriver
-                        ? payload.filter((p: any) => p.dataKey === hoveredDistributionDriver)
-                        : [payload.find((p: any) => typeof p.value === 'number' && p.value > 0) || payload[0]];
+
+                      const trackName = label as string;
+                      const track = tracks.find((t) => t.name === trackName);
+
+                      // If hovering on a specific driver bar, show their points
+                      if (hoveredDistributionDriver) {
+                        const entry = payload.find((p: any) => p.dataKey === hoveredDistributionDriver);
+                        if (!entry) return null;
+
+                        const driverName = entry.dataKey as string;
+                        const color = chartConfig[driverName]?.color || entry.color;
+
+                        return (
+                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              {track?.img && (
+                                <div
+                                  className="w-6 h-4 flex items-center justify-center"
+                                  dangerouslySetInnerHTML={{ __html: track.img }}
+                                />
+                              )}
+                              <p className="font-medium text-sm">{trackName}</p>
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-2">Points earned at this track</p>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
+                                <span className="font-medium">{driverName}</span>
+                                <span className="ml-auto text-muted-foreground">{entry.value} pts</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Otherwise, show total points scored at this track
+                      let totalPoints = 0;
+                      payload.forEach((entry: any) => {
+                        if (typeof entry.value === 'number') {
+                          totalPoints += entry.value;
+                        }
+                      });
+
                       return (
                         <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                          <p className="font-medium text-sm mb-2">{label}</p>
-                          <p className="text-xs text-muted-foreground mb-2">Points earned at this track</p>
-                          <div className="space-y-1">
-                            {entries.filter(Boolean).map((entry: any, idx: number) => {
-                              const name = entry.dataKey as string;
-                              const color = chartConfig[name]?.color || entry.color;
-                              return (
-                                <div key={`${name}-${idx}`} className="flex items-center gap-2 text-sm">
-                                  <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
-                                  <span>{name}</span>
-                                  <span className="ml-auto font-medium">{entry.value} pts</span>
-                                </div>
-                              );
-                            })}
+                          <p className="text-xs text-muted-foreground mb-2">Total points</p>
+                          <div className="flex items-center gap-2">
+                            {track?.img && (
+                              <div
+                                className="w-6 h-4 flex items-center justify-center"
+                                dangerouslySetInnerHTML={{ __html: track.img }}
+                              />
+                            )}
+                            <p className="font-medium text-sm">{trackName}</p>
+                            <span className="ml-auto text-muted-foreground">{totalPoints} pts</span>
                           </div>
                         </div>
                       );
@@ -879,44 +947,90 @@ export default function DriverStandingsPage() {
                     width={30}
                   />
                   <ChartTooltip
+                    cursor={true}
                     content={({ active, payload, label }) => {
-                      if (active && payload && payload.length) {
-                        const raceData = chartData.find((d) => d.race === label);
-                        const raceName = raceData ? raceData.race : label;
-                        return (
-                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                            <p className="font-medium text-sm mb-2">{raceName}</p>
-                            <p className="text-xs text-muted-foreground mb-2">Driver championship position</p>
-                            <div className="space-y-1">
-                              {payload.map((entry: any, index: number) => {
-                                const driverName = entry.dataKey;
-                                const color = chartConfig[driverName]?.color || entry.color;
-                                return (
-                                  <div key={index} className="flex items-center gap-2 text-sm">
-                                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                                    <span className="font-medium">{driverName}</span>
-                                    <span className="text-muted-foreground">Position {entry.value}</span>
-                                  </div>
-                                );
-                              })}
+                      if (!active || !payload || !payload.length || !hoveredRankingDriver) return null;
+
+                      const raceData = rankingData.find((d) => d.race === label);
+                      const raceName = raceData ? raceData.race : label;
+
+                      // Only show the hovered driver
+                      const entry = payload.find((p: any) => p.dataKey === hoveredRankingDriver);
+                      if (!entry) return null;
+
+                      const driverName = entry.dataKey as string;
+                      if (!driverName) return null;
+
+                      const color = chartConfig[driverName]?.color || entry.color;
+
+                      // Get track flag
+                      const trackName = (raceName as string).split(' (')[0];
+                      const track = tracks.find((t) => t.name === trackName);
+
+                      return (
+                        <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                          <div className="flex items-center gap-2 mb-2">
+                            {track?.img && (
+                              <div
+                                className="w-6 h-4 flex items-center justify-center"
+                                dangerouslySetInnerHTML={{ __html: track.img }}
+                              />
+                            )}
+                            <p className="font-medium text-sm">{trackName}</p>
+                          </div>
+                          <p className="text-xs text-muted-foreground mb-2">Championship position</p>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-sm">
+                              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                              <span className="font-medium">{driverName}</span>
+                              <span className="ml-auto text-muted-foreground">P{entry.value}</span>
                             </div>
                           </div>
-                        );
-                      }
-                      return null;
+                        </div>
+                      );
                     }}
                   />
-                  {drivers.map((d) => (
-                    <Line
-                      key={d.id}
-                      dataKey={d.name}
-                      type="monotone"
-                      stroke={activeDriver === "all" || activeDriver === d.name ? chartConfig[d.name]?.color : "transparent"}
-                      strokeWidth={activeDriver === d.name ? 3 : 2}
-                      dot={activeDriver === "all" || activeDriver === d.name}
-                      hide={activeDriver !== "all" && activeDriver !== d.name}
-                    />
-                  ))}
+                  {drivers.map((d) => {
+                    const isHovered = hoveredRankingDriver === d.name;
+                    const isOtherHovered = hoveredRankingDriver && hoveredRankingDriver !== d.name;
+                    const lineColor = chartConfig[d.name]?.color || 'hsl(0, 0%, 70%)';
+
+                    return (
+                      <Line
+                        key={d.id}
+                        dataKey={d.name}
+                        type="monotone"
+                        stroke={activeDriver === "all" || activeDriver === d.name ? lineColor : "transparent"}
+                        strokeWidth={
+                          isHovered ? 6 :
+                            activeDriver === d.name ? 3 : 2
+                        }
+                        strokeOpacity={isOtherHovered ? 0.15 : 1}
+                        dot={(activeDriver === "all" || activeDriver === d.name) ? {
+                          r: 5,
+                          strokeWidth: 2,
+                          stroke: lineColor,
+                          fill: lineColor,
+                          onMouseEnter: () => setHoveredRankingDriver(d.name),
+                          onMouseLeave: () => setHoveredRankingDriver(null),
+                          style: { cursor: 'pointer' }
+                        } : false}
+                        activeDot={{
+                          r: isHovered ? 10 : 5,
+                          strokeWidth: 2,
+                          stroke: lineColor,
+                          fill: lineColor,
+                          fillOpacity: isHovered ? 0.4 : 1,
+                          onMouseEnter: () => setHoveredRankingDriver(d.name),
+                          onMouseLeave: () => setHoveredRankingDriver(null),
+                        }}
+                        hide={activeDriver !== "all" && activeDriver !== d.name}
+                        onMouseEnter={() => setHoveredRankingDriver(d.name)}
+                        onMouseLeave={() => setHoveredRankingDriver(null)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    );
+                  })}
                 </LineChart>
               </ChartContainer>
             </div>
