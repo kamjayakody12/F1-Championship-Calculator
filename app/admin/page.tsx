@@ -68,11 +68,11 @@ export default function AdminDashboardPage() {
     fetch("/api/selected-tracks")
       .then((r) => r.json())
       .then((arr: { id: string; track: { id: string; name: string }; type: string }[]) =>
-        setTracks(arr.map((s) => ({ 
+        setTracks(arr.map((s) => ({
           id: s.id, // selected_tracks.id
           trackId: s.track.id, // tracks.id 
-          name: s.track.name, 
-          type: s.type 
+          name: s.track.name,
+          type: s.type
         })))
       );
   }, []);
@@ -91,17 +91,17 @@ export default function AdminDashboardPage() {
 
   function handleTrackChange(trackIdAndType: string) {
     const [selectedTrackId, trackType] = trackIdAndType.split('|');
-    
+
     setSelectedTrackId(selectedTrackId);
     setSelectedTrackType(trackType || "");
     setSelectedTrackValue(trackIdAndType);
-    
+
     // Find the selected track to get the actual track name
     const selectedTrackData = tracks.find(t => t.id === selectedTrackId);
     setSelectedTrack(selectedTrackData?.name || "");
-    
+
     if (!selectedTrackId) return;
-    
+
     // Load race results
     fetch(`/api/results?track=${encodeURIComponent(selectedTrackId)}`)
       .then((r) => r.json())
@@ -124,7 +124,7 @@ export default function AdminDashboardPage() {
           setResults([]);
         }
       });
-      
+
     // Load qualifying results
     fetch(`/api/qualifying?track=${encodeURIComponent(selectedTrackId)}`)
       .then((r) => r.json())
@@ -269,32 +269,34 @@ export default function AdminDashboardPage() {
     // Build payload: ONLY assigned results (drivers dragged from the pool started the race)
     // Drivers left in the pool are considered DNS (Did Not Start) and are NOT sent or counted as DNFs
     const resultsToSend = results;
-    
+
     const method = isUpdating ? "PUT" : "POST";
-    const endpoint = isUpdating ? `/api/results/${selectedTrackId}` : "/api/results";
-    
+    const endpoint = isUpdating
+      ? `/api/results/update?track=${selectedTrackId}`
+      : "/api/results";
+
     try {
       const response = await fetch(endpoint, {
         method: method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           track: selectedTrackId, // Use selected_tracks.id
           trackType: selectedTrackType,
-          results: resultsToSend 
+          results: resultsToSend
         }),
       });
-      
+
       if (!response.ok) {
         // Try to show server-provided error
         let msg = `Failed to ${isUpdating ? 'update' : 'save'} results`;
         try {
           const data = await response.json();
           if (data?.error) msg = data.error;
-        } catch (_) {}
+        } catch (_) { }
         toast.error(msg);
         return;
       }
-      
+
       toast.success(isUpdating ? "Results updated!" : "Results saved!");
     } catch (error) {
       toast.error(`Failed to ${isUpdating ? 'update' : 'save'} results`);
@@ -307,29 +309,29 @@ export default function AdminDashboardPage() {
       toast.error("Please select a track");
       return;
     }
-    
+
     const qualifyingToSend = qualifying;
-    
+
     try {
       const response = await fetch("/api/qualifying", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           track: selectedTrackId,
-          qualifyingResults: qualifyingToSend 
+          qualifyingResults: qualifyingToSend
         }),
       });
-      
+
       if (!response.ok) {
         let msg = "Failed to save qualifying results";
         try {
           const data = await response.json();
           if (data?.error) msg = data.error;
-        } catch (_) {}
+        } catch (_) { }
         toast.error(msg);
         return;
       }
-      
+
       toast.success("Qualifying results saved!");
     } catch (error) {
       toast.error("Failed to save qualifying results");
@@ -339,19 +341,19 @@ export default function AdminDashboardPage() {
 
   function computePoints(r: ResultRow) {
     if (!rules) return 0;
-    
+
     // If driver didn't finish the race, they get zero points
     if (!r.racefinished) return 0;
-    
+
     // Choose point system based on track type
     const pointsMapping = selectedTrackType === 'Sprint' ? sprintPointsMapping : racePointsMapping;
     const maxPositions = selectedTrackType === 'Sprint' ? 8 : 10;
-    
+
     const base = r.position <= maxPositions ? pointsMapping[r.position - 1] : 0;
-    
+
     const poleBonus = rules.polegivespoint && r.pole ? 1 : 0;
     const fastestLapBonus = rules.fastestlapgivespoint && r.fastestLap ? 1 : 0;
-    
+
     return base + poleBonus + fastestLapBonus;
   }
 
@@ -435,7 +437,7 @@ export default function AdminDashboardPage() {
 
           {/* Split View: Qualifying (Left) and Race Results (Right) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
+
             {/* Left Side: Qualifying */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -476,9 +478,8 @@ export default function AdminDashboardPage() {
                           setQualifyingDraggingPos(null);
                           setQualifyingDragOverPos(null);
                         }}
-                        className={`transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                          qualifyingDragOverPos === q.position ? "ring-2 ring-primary/40" : ""
-                        }`}
+                        className={`transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${qualifyingDragOverPos === q.position ? "ring-2 ring-primary/40" : ""
+                          }`}
                       >
                         <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                           <button
@@ -566,9 +567,8 @@ export default function AdminDashboardPage() {
                           setDraggingPos(null);
                           setDragOverPos(null);
                         }}
-                        className={`transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                          dragOverPos === r.position ? "ring-2 ring-primary/40" : ""
-                        }`}
+                        className={`transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${dragOverPos === r.position ? "ring-2 ring-primary/40" : ""
+                          }`}
                       >
                         <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                           <button

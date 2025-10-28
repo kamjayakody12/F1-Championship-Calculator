@@ -383,8 +383,8 @@ export default async function HomePage() {
   // ========================================
 
   return (
-    <div className="p-4 md:p-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="p-3 sm:p-4 md:p-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
 
         {/* ==================== DRIVER STANDINGS ==================== */}
         <section>

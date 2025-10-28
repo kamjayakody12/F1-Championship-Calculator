@@ -147,7 +147,7 @@ export default function ResultsPage() {
 
       try {
         // Fetch race results
-        const raceResponse = await fetch(`/api/results/with-details?track=${selectedTrack}`);
+        const raceResponse = await fetch(`/api/results/details?track=${selectedTrack}`);
         if (raceResponse.ok) {
           const raceData = await raceResponse.json();
           setResults(raceData);
@@ -354,7 +354,7 @@ export default function ResultsPage() {
   const fastestLapDriver = results?.find((r: ExtendedResult) => r.fastestlap);
 
   return (
-    <div className="p-4 md:p-8 space-y-6 md:space-y-8">
+    <div className="p-3 sm:p-4 md:p-8 space-y-4 sm:space-y-6 md:space-y-8">
       {/* Header with track selection */}
       {!tracksLoading && (
         <div className="flex items-center justify-between">
@@ -388,10 +388,10 @@ export default function ResultsPage() {
       )}
 
       {results && results.length > 0 && !loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 items-stretch animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 items-stretch animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
           {/* Race Winner Card */}
-          <Card className="min-h-[120px]">
-            <CardHeader className="pb-2 min-h-[88px]">
+          <Card className="min-h-[120px] flex flex-col">
+            <CardHeader className="pb-2 min-h-[88px] flex-1">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <CardTitle className="text-2xl font-bold mb-2 text-yellow-500">
@@ -434,8 +434,8 @@ export default function ResultsPage() {
           </Card>
 
           {/* Pole Position Card */}
-          <Card className="min-h-[120px]">
-            <CardHeader className="pb-2 min-h-[88px]">
+          <Card className="min-h-[120px] flex flex-col">
+            <CardHeader className="pb-2 min-h-[88px] flex-1">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <CardTitle className="text-2xl font-bold mb-2 text-green-600">
@@ -478,8 +478,8 @@ export default function ResultsPage() {
           </Card>
 
           {/* Fastest Lap Card */}
-          <Card className="min-h-[120px]">
-            <CardHeader className="pb-2 min-h-[88px]">
+          <Card className="min-h-[120px] flex flex-col">
+            <CardHeader className="pb-2 min-h-[88px] flex-1">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <CardTitle className="text-2xl font-bold mb-2 text-purple-500">
@@ -526,14 +526,20 @@ export default function ResultsPage() {
       {error ? (
         <div className="text-red-500 text-center py-8">{error}</div>
       ) : tracksLoading ? (
-        <div className="flex flex-col items-center justify-center py-8 space-y-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          <div className="text-muted-foreground">Loading tracks...</div>
+        <div className="flex flex-col items-center justify-center py-16 space-y-4">
+          <div className="relative w-16 h-16">
+            <div className="absolute top-0 left-0 w-full h-full border-4 border-primary/20 rounded-full"></div>
+            <div className="absolute top-0 left-0 w-full h-full border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          </div>
+          <div className="text-muted-foreground font-medium">Loading tracks...</div>
         </div>
       ) : loading ? (
-        <div className="flex flex-col items-center justify-center py-8 space-y-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          <div className="text-muted-foreground">Loading results...</div>
+        <div className="flex flex-col items-center justify-center py-16 space-y-4">
+          <div className="relative w-16 h-16">
+            <div className="absolute top-0 left-0 w-full h-full border-4 border-primary/20 rounded-full"></div>
+            <div className="absolute top-0 left-0 w-full h-full border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          </div>
+          <div className="text-muted-foreground font-medium">Loading results...</div>
         </div>
       ) : selectedTrack ? (
         <div className="w-full animate-in fade-in-0 slide-in-from-bottom-2 duration-300">

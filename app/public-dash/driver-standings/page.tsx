@@ -144,8 +144,13 @@ export default function DriverStandingsPage() {
   if (loading) {
     return (
       <div className="p-4 md:p-8">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-lg">Loading driver standings...</div>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] space-y-4">
+          <div className="relative">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-primary"></div>
+            <div className="absolute inset-0 rounded-full h-16 w-16 border-4 border-primary/20"></div>
+          </div>
+          <div className="text-lg font-medium text-muted-foreground">Loading driver standings...</div>
+          <div className="text-sm text-muted-foreground/60">Fetching championship data</div>
         </div>
       </div>
     );
@@ -284,16 +289,16 @@ export default function DriverStandingsPage() {
                           dot={
                             activeDriver === "all" || activeDriver === d.name
                               ? {
-                                  r: 4,
-                                  strokeWidth: 2,
-                                  stroke: lineColor,
-                                  fill: lineColor,
-                                  onMouseEnter: () =>
-                                    setHoveredProgressionDriver(d.name),
-                                  onMouseLeave: () =>
-                                    setHoveredProgressionDriver(null),
-                                  style: { cursor: "pointer" },
-                                }
+                                r: 4,
+                                strokeWidth: 2,
+                                stroke: lineColor,
+                                fill: lineColor,
+                                onMouseEnter: () =>
+                                  setHoveredProgressionDriver(d.name),
+                                onMouseLeave: () =>
+                                  setHoveredProgressionDriver(null),
+                                style: { cursor: "pointer" },
+                              }
                               : false
                           }
                           activeDot={{
@@ -552,14 +557,14 @@ export default function DriverStandingsPage() {
                         dot={
                           activeDriver === "all" || activeDriver === d.name
                             ? {
-                                r: 5,
-                                strokeWidth: 2,
-                                stroke: lineColor,
-                                fill: lineColor,
-                                onMouseEnter: () => setHoveredRankingDriver(d.name),
-                                onMouseLeave: () => setHoveredRankingDriver(null),
-                                style: { cursor: "pointer" },
-                              }
+                              r: 5,
+                              strokeWidth: 2,
+                              stroke: lineColor,
+                              fill: lineColor,
+                              onMouseEnter: () => setHoveredRankingDriver(d.name),
+                              onMouseLeave: () => setHoveredRankingDriver(null),
+                              style: { cursor: "pointer" },
+                            }
                             : false
                         }
                         activeDot={{
