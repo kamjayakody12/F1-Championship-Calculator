@@ -42,14 +42,31 @@ export async function PUT(
   for (const existingResult of existingResults || []) {
     if (!existingResult.driver) continue;
     
-    // Calculate points that were previously awarded
-    const pointsMapping = eventType === 'Sprint' ? sprintPointsMapping : racePointsMapping;
-    const maxPositions = eventType === 'Sprint' ? 8 : 10;
+    // We need to determine what event type THIS specific result was for
+    // Get the selected_track to know if it was a sprint or race
+    const { data: existingTrackData } = await adminSupabase
+      .from('selected_tracks')
+      .select('type')
+      .eq('id', track)
+      .single();
+    
+    const existingEventType = existingTrackData?.type || 'Race';
+    
+    // Calculate points that were previously awarded using the CORRECT event type
+    const pointsMapping = existingEventType === 'Sprint' ? sprintPointsMapping : racePointsMapping;
+    const maxPositions = existingEventType === 'Sprint' ? 8 : 10;
     
     const priorPos = (existingResult as any).finishing_position ?? existingResult.position;
     const basePoints = priorPos <= maxPositions ? pointsMapping[(priorPos || 0) - 1] : 0;
-    const bonusPoints = (rules.polegivespoint && existingResult.pole ? 1 : 0) + (rules.fastestlapgivespoint && existingResult.fastestlap ? 1 : 0);
-    const totalPoints = basePoints + bonusPoints;
+    
+    // Only add bonus points if the driver finished the race
+    const bonusPoints = existingResult.racefinished !== false 
+      ? (rules.polegivespoint && existingResult.pole ? 1 : 0) + (rules.fastestlapgivespoint && existingResult.fastestlap ? 1 : 0)
+      : 0;
+    
+    const totalPoints = existingResult.racefinished !== false ? basePoints + bonusPoints : 0;
+    
+    console.log(`Reverting for driver ${existingResult.driver}: eventType=${existingEventType}, position=${priorPos}, basePoints=${basePoints}, bonusPoints=${bonusPoints}, totalPoints=${totalPoints}, racefinished=${existingResult.racefinished}`);
     
     // Subtract these points from the driver
     const { data: driverData, error: driverFetchError } = await adminSupabase
@@ -150,6 +167,8 @@ export async function PUT(
     const basePoints = row.position <= maxPositions ? pointsMapping[row.position - 1] : 0;
     const bonusPoints = (rules.polegivespoint && row.pole ? 1 : 0) + (rules.fastestlapgivespoint && row.fastestLap ? 1 : 0);
     const totalPoints = basePoints + bonusPoints;
+    
+    console.log(`Adding points for driver ${row.driverId}: eventType=${eventType}, position=${row.position}, basePoints=${basePoints}, bonusPoints=${bonusPoints}, totalPoints=${totalPoints}, currentPoints=${currentDriverPoints}, newTotal=${currentDriverPoints + totalPoints}`);
     
     // Fetch qualifying position (optional)
     const { data: qData } = await adminSupabase

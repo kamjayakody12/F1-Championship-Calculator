@@ -73,6 +73,9 @@ export function useDriverStandings() {
         rules
       );
 
+      console.log(`Processed ${raceResults.length} race results`);
+      console.log(`Unique tracks in results:`, [...new Set(raceResults.map(r => r.track))]);
+
       // Calculate driver statistics
       const driverStats = calculateDriverStats(
         driversData,
@@ -133,18 +136,21 @@ function processRaceResults(
   return results.map((result: any) => {
     const driver = driverMap.get(result.driver);
     const team = teamMap.get(driver?.team || "");
-    const schedule = schedules.find((s: any) => {
-      const st = selectedTrackMap.get(s.track);
-      return st?.track?.id === result.track;
-    });
 
-    const selectedTrack = selectedTrackMap.get(schedule?.track || "");
+    // result.track is a selected_track.id, so match directly with schedule.track
+    const schedule = schedules.find((s: any) => s.track === result.track);
+
+    const selectedTrack = selectedTrackMap.get(result.track);
     const eventType = selectedTrack?.type || "Race";
     const points = calculateResultPoints(result, rules, eventType);
 
+    // Get the physical track ID and name
+    const physicalTrackId = selectedTrack?.track?.id || result.track;
+    const physicalTrackName = selectedTrack?.track?.name || trackMap.get(physicalTrackId) || "Unknown";
+
     return {
-      track: result.track,
-      trackName: trackMap.get(result.track) || "Unknown",
+      track: result.track, // This is selected_track.id
+      trackName: physicalTrackName,
       date: schedule?.date || "",
       position: result.finishing_position ?? result.position,
       driver: result.driver,
@@ -216,102 +222,98 @@ function calculateChartData(
       new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
-  // Group results by track
+  // Group schedules by physical track (to combine sprint + race)
   const trackGroups = new Map<string, any[]>();
   sortedSchedules.forEach((schedule: any, originalRaceIndex: number) => {
     const st = selectedTrackMap.get(schedule.track);
-    const trackId = st?.track?.id;
-    if (!trackId) return;
+    // Get the physical track ID
+    const physicalTrackId = st?.track?.id;
 
-    if (!trackGroups.has(trackId)) trackGroups.set(trackId, []);
+    console.log(`Schedule ${originalRaceIndex}: selected_track=${schedule.track}, physicalTrackId=${physicalTrackId}, type=${st?.type}`);
+
+    if (!physicalTrackId) {
+      console.warn(`No physical trackId found for schedule:`, schedule);
+      return;
+    }
+
+    if (!trackGroups.has(physicalTrackId)) trackGroups.set(physicalTrackId, []);
     trackGroups
-      .get(trackId)!
+      .get(physicalTrackId)!
       .push({ schedule, originalRaceIndex, selectedTrack: st });
   });
 
-  // Calculate points progression
-  const driverPointsProgression = new Map<
-    string,
-    { [raceIndex: number]: number }
-  >();
+  console.log(`Built ${trackGroups.size} track groups:`, Array.from(trackGroups.keys()));
+
+  // Calculate points progression BY TRACK (combining sprint + race for same track)
+  const driverPointsProgression = new Map<string, { [trackIndex: number]: number }>();
   driversData.forEach((d: any) => driverPointsProgression.set(d.id, {}));
-
-  sortedSchedules.forEach((schedule: any, idx: number) => {
-    const st = selectedTrackMap.get(schedule.track);
-    const raceResultsForTrack = raceResults.filter((r) => r.track === st?.id);
-    const driverPointsThisRace = new Map<string, number>();
-
-    raceResultsForTrack.forEach((r) => {
-      const curr = driverPointsThisRace.get(r.driver) || 0;
-      driverPointsThisRace.set(r.driver, curr + r.points);
-    });
-
-    driversData.forEach((d: any) => {
-      const cur = driverPointsProgression.get(d.id) || {};
-      const prev = idx > 0 ? cur[idx - 1] || 0 : 0;
-      const add = driverPointsThisRace.get(d.id) || 0;
-      cur[idx] = prev + add;
-      driverPointsProgression.set(d.id, cur);
-    });
-  });
 
   // Build chart data arrays
   const progressionData: any[] = [];
   const distributionData: any[] = [];
-  let completedRoundIndex = 0;
+  let trackIndex = 0;
 
+  // Process each track group (which may contain sprint + race)
   trackGroups.forEach((schedulesForTrack, trackId) => {
-    const hasResults = schedulesForTrack.some(({ schedule }: any) => {
-      const st = selectedTrackMap.get(schedule.track);
-      const rr = raceResults.filter((r) => r.track === st?.id);
-      return rr.length > 0;
-    });
+    // Get the selected_track IDs for this track (there may be multiple for sprint+race)
+    const selectedTrackIds = schedulesForTrack.map(s => s.schedule.track);
 
-    if (!hasResults) return;
+    // Get all results for ANY of the selected tracks (sprint or race) for this physical track
+    // r.track in raceResults is the selected_track.id, not the physical track.id
+    const allResultsForTrack = raceResults.filter((r) => selectedTrackIds.includes(r.track));
+
+    console.log(`Track ${trackId}: Found ${allResultsForTrack.length} results from selected tracks:`, selectedTrackIds);
+
+    if (allResultsForTrack.length === 0) return;
 
     const first = schedulesForTrack[0];
     const st = first.selectedTrack;
+    const trackName = st?.track?.name || "Unknown";
+
+    // Calculate points earned by each driver at THIS TRACK (sprint + race combined)
+    const driverPointsThisTrack = new Map<string, number>();
+    allResultsForTrack.forEach((r) => {
+      const curr = driverPointsThisTrack.get(r.driver) || 0;
+      driverPointsThisTrack.set(r.driver, curr + r.points);
+    });
+
+    // Update cumulative progression
+    driversData.forEach((d: any) => {
+      const prog = driverPointsProgression.get(d.id) || {};
+      const prevTotal = trackIndex > 0 ? prog[trackIndex - 1] || 0 : 0;
+      const pointsEarnedHere = driverPointsThisTrack.get(d.id) || 0;
+      prog[trackIndex] = prevTotal + pointsEarnedHere;
+      driverPointsProgression.set(d.id, prog);
+    });
 
     // Progression data point
     const dataPoint: any = {
-      race: `${st?.track?.name || "Unknown"} (${new Date(
-        first.schedule.date
-      ).toLocaleDateString()})`,
-      raceIndex: completedRoundIndex,
+      race: `${trackName} (${new Date(first.schedule.date).toLocaleDateString()})`,
+      raceIndex: trackIndex,
       date: first.schedule.date,
     };
 
     driversData.forEach((d: any) => {
-      const lastSchedule = schedulesForTrack[schedulesForTrack.length - 1];
       const prog = driverPointsProgression.get(d.id) || {};
-      dataPoint[d.name] = prog[lastSchedule.originalRaceIndex] || 0;
+      dataPoint[d.name] = prog[trackIndex] || 0;
     });
 
     progressionData.push(dataPoint);
 
-    // Distribution data point
+    // Distribution data point - points earned at this specific track
     const distRow: any = {
-      race: `${st?.track?.name || "Unknown"} (${new Date(
-        first.schedule.date
-      ).toLocaleDateString()})`,
-      trackNameOnly: st?.track?.name || "Unknown",
+      race: `${trackName} (${new Date(first.schedule.date).toLocaleDateString()})`,
+      trackNameOnly: trackName,
       selectedTrackId: st?.id,
       date: first.schedule.date,
     };
 
     driversData.forEach((d: any) => {
-      let raw = 0;
-      schedulesForTrack.forEach(({ originalRaceIndex }: any) => {
-        const prog = driverPointsProgression.get(d.id) || {};
-        const prev = originalRaceIndex > 0 ? prog[originalRaceIndex - 1] || 0 : 0;
-        const eventPoints = (prog[originalRaceIndex] || 0) - prev;
-        raw += Math.max(0, eventPoints);
-      });
-      distRow[d.name] = raw;
+      distRow[d.name] = driverPointsThisTrack.get(d.id) || 0;
     });
 
     distributionData.push(distRow);
-    completedRoundIndex++;
+    trackIndex++;
   });
 
   // Calculate ranking evolution

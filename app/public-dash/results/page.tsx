@@ -84,7 +84,7 @@ export default function ResultsPage() {
         if (response.ok) {
           const tracksData = await response.json();
           console.log('Raw tracks data:', tracksData); // Debug log
-          
+
           // Check if we have valid data
           if (tracksData && tracksData.length > 0) {
             // Transform the data to handle the nested track structure
@@ -110,7 +110,7 @@ export default function ResultsPage() {
                 type: 'Race' // Default to Race for direct tracks
               }));
               setTracks(transformedDirectTracks);
-            } 
+            }
           }
         } else {
           console.error('Failed to fetch selected tracks, trying direct tracks API');
@@ -141,10 +141,10 @@ export default function ResultsPage() {
   useEffect(() => {
     const fetchResults = async () => {
       if (!selectedTrack) return;
-      
+
       setLoading(true);
       setError(null);
-      
+
       try {
         // Fetch race results
         const raceResponse = await fetch(`/api/results/with-details?track=${selectedTrack}`);
@@ -179,17 +179,17 @@ export default function ResultsPage() {
   const calculatePoints = (position: number, pole: boolean, fastestLap: boolean, type: 'Race' | 'Sprint'): number => {
     const racePoints = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
     const sprintPoints = [8, 7, 6, 5, 4, 3, 2, 1];
-    
+
     const pointsMapping = type === 'Sprint' ? sprintPoints : racePoints;
     const basePoints = position <= pointsMapping.length ? pointsMapping[position - 1] : 0;
-    
+
     // Add bonus points for pole and fastest lap (only in race)
     let bonusPoints = 0;
     if (type === 'Race') {
       if (pole) bonusPoints += 1;
       if (fastestLap) bonusPoints += 1;
     }
-    
+
     return basePoints + bonusPoints;
   };
   // Reusable function for driver number styling
@@ -236,9 +236,9 @@ export default function ResultsPage() {
       accessorKey: 'driverDetails.driver_number',
       header: 'NO',
       cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <DriverNumberCell 
-          driverNumber={row.original.driverDetails.driver_number} 
-          teamColor={row.original.teamDetails?.color || '#282828'} 
+        <DriverNumberCell
+          driverNumber={row.original.driverDetails.driver_number}
+          teamColor={row.original.teamDetails?.color || '#282828'}
         />
       )
     },
@@ -257,7 +257,7 @@ export default function ResultsPage() {
         const isStakeF1 = row.original.teamDetails?.name === 'Stake F1 Team';
         const logoSize = (isRB || isStakeF1) ? 'w-8 h-8' : 'w-6 h-6';
         const fallbackSize = (isRB || isStakeF1) ? 'w-8 h-8' : 'w-6 h-6';
-        
+
         return (
           <div className="flex items-center gap-3">
             {(() => {
@@ -303,7 +303,7 @@ export default function ResultsPage() {
       header: 'PTS',
       cell: ({ row }: { row: { original: ExtendedResult } }) => (
         <div className="font-mono font-bold text-lg">
-          {row.original.points}
+          {!row.original.racefinished ? 'DNF' : row.original.points}
         </div>
       )
     }
@@ -322,9 +322,9 @@ export default function ResultsPage() {
     return (
       <>
         {/* Light Mode: Soft, bordered style */}
-        <div 
+        <div
           className="font-mono font-bold text-sm rounded-md px-2 py-1 inline-flex items-center justify-center min-w-[36px] dark:hidden"
-          style={{ 
+          style={{
             color: light.text,
             backgroundColor: light.background,
             border: `1px solid ${light.text}33` // Subtle border with transparency
@@ -332,11 +332,11 @@ export default function ResultsPage() {
         >
           {driverNumber || '-'}
         </div>
-        
+
         {/* Dark Mode: Solid, vibrant style */}
-        <div 
+        <div
           className="font-mono font-bold text-sm rounded-md px-2 py-1 hidden items-center justify-center min-w-[36px] dark:inline-flex"
-          style={{ 
+          style={{
             color: dark.text,
             backgroundColor: dark.background
             // No border needed for the solid look in dark mode
@@ -405,7 +405,7 @@ export default function ResultsPage() {
                       const isStakeF1 = raceWinner?.teamDetails?.name === 'Stake F1 Team';
                       const logoSize = (isRB || isStakeF1) ? 'w-6 h-6' : 'w-4 h-4';
                       const fallbackSize = (isRB || isStakeF1) ? 'w-6 h-6' : 'w-4 h-4';
-                      
+
                       return logoUrl ? (
                         <img
                           src={logoUrl}
@@ -449,7 +449,7 @@ export default function ResultsPage() {
                       const isStakeF1 = poleSitter?.teamDetails?.name === 'Stake F1 Team';
                       const logoSize = (isRB || isStakeF1) ? 'w-6 h-6' : 'w-4 h-4';
                       const fallbackSize = (isRB || isStakeF1) ? 'w-6 h-6' : 'w-4 h-4';
-                      
+
                       return logoUrl ? (
                         <img
                           src={logoUrl}
@@ -493,7 +493,7 @@ export default function ResultsPage() {
                       const isStakeF1 = fastestLapDriver?.teamDetails?.name === 'Stake F1 Team';
                       const logoSize = (isRB || isStakeF1) ? 'w-6 h-6' : 'w-4 h-4';
                       const fallbackSize = (isRB || isStakeF1) ? 'w-6 h-6' : 'w-4 h-4';
-                      
+
                       return logoUrl ? (
                         <img
                           src={logoUrl}

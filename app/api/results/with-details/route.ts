@@ -5,7 +5,7 @@ import { apiCache, withCacheControlHeaders } from "@/lib/cache";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const track = searchParams.get("track");
-  
+
   if (!track) {
     return NextResponse.json({ error: "No track specified" }, { status: 400 });
   }
@@ -25,7 +25,19 @@ export async function GET(request: Request) {
 
     const eventType = selectedTrack?.type || 'Race';
 
-    const cacheKey = `results-with-details:track:${track}:${eventType}:v3`; // Updated cache key to force refresh
+    // Fetch rules to determine if pole and fastest lap give points
+    const { data: rules, error: rulesError } = await supabase
+      .from("rules")
+      .select("polegivespoint, fastestlapgivespoint")
+      .eq("id", 1)
+      .single();
+
+    if (rulesError) {
+      console.error("Error fetching rules:", rulesError);
+      return NextResponse.json({ error: rulesError.message }, { status: 500 });
+    }
+
+    const cacheKey = `results-with-details:track:${track}:${eventType}:v4`; // Updated cache key to force refresh
     const cached = apiCache.get<any[]>(cacheKey);
     if (cached) return NextResponse.json(cached, withCacheControlHeaders());
 
@@ -94,7 +106,7 @@ export async function GET(request: Request) {
       },
       time: result.racefinished ? (result.finishing_position === 1 ? '1:35:21.231' : '-') : 'DNF',
       gap: result.racefinished && result.finishing_position > 1 ? '-' : '-',
-      points: calculatePoints(result.finishing_position, result.pole, result.fastestlap, eventType as 'Race' | 'Sprint'),
+      points: calculatePoints(result.finishing_position, result.pole, result.fastestlap, result.racefinished, eventType as 'Race' | 'Sprint', rules),
       laps: result.racefinished ? 70 : Math.floor(Math.random() * 50) + 10,
       fastestLapTime: result.fastestlap ? '1:19.409' : undefined,
       fastestLapNumber: result.fastestlap ? 45 : undefined
@@ -109,19 +121,29 @@ export async function GET(request: Request) {
   }
 }
 
-function calculatePoints(position: number, pole: boolean, fastestLap: boolean, type: 'Race' | 'Sprint'): number {
+function calculatePoints(
+  position: number,
+  pole: boolean,
+  fastestLap: boolean,
+  racefinished: boolean,
+  type: 'Race' | 'Sprint',
+  rules: { polegivespoint: boolean; fastestlapgivespoint: boolean }
+): number {
+  // If driver didn't finish the race, they get 0 points regardless of pole or fastest lap
+  if (!racefinished) {
+    return 0;
+  }
+
   const racePoints = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
   const sprintPoints = [8, 7, 6, 5, 4, 3, 2, 1];
-  
+
   const pointsMapping = type === 'Sprint' ? sprintPoints : racePoints;
   const basePoints = position <= pointsMapping.length ? pointsMapping[position - 1] : 0;
-  
-  // Add bonus points for pole and fastest lap (only in race)
+
+  // Add bonus points for pole and fastest lap based on rules (applies to both Race and Sprint)
   let bonusPoints = 0;
-  if (type === 'Race') {
-    if (pole) bonusPoints += 1;
-    if (fastestLap) bonusPoints += 1;
-  }
-  
+  if (pole && rules.polegivespoint) bonusPoints += 1;
+  if (fastestLap && rules.fastestlapgivespoint) bonusPoints += 1;
+
   return basePoints + bonusPoints;
 }
