@@ -1,18 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState, useMemo } from "react";
-import { supabase } from "@/lib/db";
-import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { ArrowLeft } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ColumnDef } from "@tanstack/react-table";
+import DataTable from "@/components/data-table";
 import {
   Card,
   CardContent,
@@ -23,579 +13,137 @@ import {
 import {
   ChartConfig,
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
-  ChartTooltipContent,
 } from "@/components/ui/chart";
-import { CartesianGrid, Line, LineChart, XAxis, YAxis, Bar, BarChart } from "recharts";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+  Bar,
+  BarChart,
+} from "recharts";
 
-interface Team {
-  id: string;
-  name: string;
-  points: number;
-  constructorPoints: number;
-  drivers: Driver[];
-  logo?: string;
-}
-
-interface Driver {
-  id: string;
-  name: string;
-  points: number;
-  team: string;
-}
-
-interface RaceResult {
-  track: string;
-  trackName: string;
-  date: string;
-  position: number;
-  driver: string;
-  driverName: string;
-  teamId: string;
-  teamName: string;
-  points: number;
-  pole: boolean;
-  fastestlap: boolean;
-  racefinished: boolean;
-}
-
-interface TeamStatsData {
-  teamName: string;
-  teamLogo: string;
-  wins: number;
-  podiums: number;
-  pointsFinishes: number;
-  poles: number;
-  dnfs: number;
-}
+import { useConstructorStandings } from "./hooks/useConstructorStandings";
+import { Team } from "./hooks/types";
+import { TEAM_COLOR_MAP, extractImageUrl, getTeamColorVariations } from "./hooks/constants";
+import { ProgressionTooltip } from "./components/ProgressionTooltip";
+import { DistributionTooltip } from "./components/DistributionTooltip";
+import { RankingTooltip } from "./components/RankingTooltip";
 
 export default function ConstructorStandingsPage() {
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [rankingData, setRankingData] = useState<any[]>([]);
-  const [statsData, setStatsData] = useState<TeamStatsData[]>([]);
-  const [distributionData, setDistributionData] = useState<any[]>([]);
-  const [hoveredTeam, setHoveredTeam] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  // State management
   const [activeTeam, setActiveTeam] = useState<string>("all");
-  const [tracks, setTracks] = useState<any[]>([]);
+  const [hoveredDistributionTeam, setHoveredDistributionTeam] = useState<string | null>(null);
+  const [hoveredProgressionTeam, setHoveredProgressionTeam] = useState<string | null>(null);
+  const [hoveredRankingTeam, setHoveredRankingTeam] = useState<string | null>(null);
 
-  // Helper function to extract image URL from HTML img tag
-  const extractImageUrl = (htmlString: string): string => {
-    if (!htmlString) return '';
-    const srcMatch = htmlString.match(/src="([^"]+)"/);
-    return srcMatch ? srcMatch[1] : '';
+  // Fetch data
+  const {
+    teams,
+    chartData,
+    rankingData,
+    statsData,
+    distributionData,
+    tracks,
+    loading,
+  } = useConstructorStandings();
+
+  // Handle row click
+  const handleTeamClick = (teamName: string) => {
+    setActiveTeam(activeTeam === teamName ? "all" : teamName);
   };
 
-  // Helper function to generate team color variations
-  const getTeamColorVariations = (teamName: string) => {
-    const baseColor = teamColorMap[teamName] || 'hsl(0, 0%, 50%)';
-
-    // Parse HSL values
-    const hslMatch = baseColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
-    if (!hslMatch) return {
-      pointsFinishes: baseColor,
-      podiums: baseColor,
-      wins: baseColor,
-      poles: baseColor,
-      dnfs: baseColor
-    };
-
-    const [, h, s, l] = hslMatch.map(Number);
-
-    // Create variations from lightest to darkest
-    return {
-      pointsFinishes: `hsl(${h}, ${Math.min(s + 20, 100)}%, ${Math.min(l + 30, 85)}%)`, // Lightest
-      podiums: `hsl(${h}, ${s}%, ${Math.min(l + 15, 75)}%)`,
-      wins: `hsl(${h}, ${s}%, ${l}%)`, // Base color
-      poles: `hsl(${h}, ${Math.max(s - 10, 30)}%, ${Math.max(l - 15, 25)}%)`,
-      dnfs: `hsl(${h}, ${Math.max(s - 20, 20)}%, ${Math.max(l - 30, 15)}%)` // Darkest
-    };
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    try {
-      // Fetch all necessary data
-      const [
-        { data: drivers },
-        { data: teamsData },
-        { data: results },
-        { data: schedules },
-        { data: tracks },
-        { data: selectedTracks },
-        { data: rules }
-      ] = await Promise.all([
-        supabase.from('drivers').select('*'),
-        supabase.from('teams').select('*'),
-        supabase.from('results').select('*'),
-        supabase.from('schedules').select('*'),
-        supabase.from('tracks').select('*'),
-        supabase.from('selected_tracks').select('*, track(*)'),
-        supabase.from('rules').select('polegivespoint, fastestlapgivespoint').eq('id', 1).single()
-      ]);
-
-      console.log('Raw data fetched:', {
-        drivers: drivers?.length,
-        teams: teamsData?.length,
-        results: results?.length,
-        schedules: schedules?.length,
-        tracks: tracks?.length,
-        selectedTracks: selectedTracks?.length
-      });
-
-
-      if (!drivers || !teamsData || !results || !schedules || !tracks || !selectedTracks || !rules) {
-        throw new Error('Failed to fetch data');
-      }
-
-      // Create a map of track IDs to track names
-      const trackMap = new Map(tracks.map(track => [track.id, track.name]));
-      setTracks(tracks);
-
-      // Create a map of selected track IDs to selected track info
-      const selectedTrackMap = new Map(selectedTracks.map(st => [st.id, st]));
-      console.log('SelectedTrackMap entries:', Array.from(selectedTrackMap.entries()));
-
-      // Create a map of driver IDs to driver info
-      const driverMap = new Map(drivers.map(driver => [driver.id, driver]));
-
-      // Create a map of team IDs to team info
-      const teamMap = new Map(teamsData.map(team => [team.id, team]));
-
-      // Sort schedules by date to get race order
-      const sortedSchedules = schedules.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-      console.log('Sorted schedules:', sortedSchedules.map(s => {
-        const selectedTrack = selectedTrackMap.get(s.track);
-        return {
-          track: selectedTrack?.track?.name,
-          date: s.date,
-          selectedTrackId: s.track,
-          type: selectedTrack?.type
-        };
-      }));
-
-      const raceResults: RaceResult[] = results.map(result => {
-        const driver = driverMap.get(result.driver);
-        const team = teamMap.get(driver?.team || ''); // Use driver's team since results.team doesn't exist yet
-        const trackName = trackMap.get(result.track) || 'Unknown Track';
-
-        // Find the schedule for this track to get the date
-        const schedule = schedules.find(s => {
-          const selectedTrack = selectedTrackMap.get(s.track); // Use s.track (which is selected_tracks.id)
-          const matches = selectedTrack?.track?.id === result.track;
-          if (matches) {
-            console.log(`Found schedule for result track ${result.track}:`, {
-              scheduleDate: s.date,
-              selectedTrackId: s.track,
-              trackName: selectedTrack?.track?.name
-            });
-          }
-          return matches;
-        });
-
-        // Calculate points for this result (apply rules for bonus points)
-        const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
-        const sprintPointsMapping = [8, 7, 6, 5, 4, 3, 2, 1];
-
-        let points = 0;
-        if (result.racefinished) {
-          const pos = (result as any).finishing_position ?? result.position;
-
-          // Determine event type from schedule
-          const selectedTrack = selectedTrackMap.get(schedule?.track || '');
-          const eventType = selectedTrack?.type || 'Race';
-
-          // Choose appropriate points mapping
-          const pointsMapping = eventType === 'Sprint' ? sprintPointsMapping : racePointsMapping;
-          const maxPositions = eventType === 'Sprint' ? 8 : 10;
-
-          const basePoints = pos <= maxPositions ? pointsMapping[(pos || 0) - 1] : 0;
-          const bonusPoints = (rules.polegivespoint && result.pole ? 1 : 0) + (rules.fastestlapgivespoint && result.fastestlap ? 1 : 0);
-          points = basePoints + bonusPoints;
-        }
-
-        return {
-          track: result.track,
-          trackName,
-          date: schedule?.date || '',
-          position: (result as any).finishing_position ?? result.position,
-          driver: result.driver,
-          driverName: driver?.name || 'Unknown',
-          teamId: driver?.team || '', // Use driver's team since results.team doesn't exist yet
-          teamName: team?.name || 'Unknown',
-          points,
-          pole: result.pole || false,
-          fastestlap: result.fastestlap || false,
-          racefinished: result.racefinished !== false // Default to true if null/undefined
-        };
-      });
-
-      console.log('Race results processed:', raceResults.length);
-      console.log('Sample race results:', raceResults.slice(0, 5));
-
-      // Calculate team statistics
-      const teamStats = new Map<string, TeamStatsData>();
-
-      // Initialize team stats
-      teamsData.forEach(team => {
-        teamStats.set(team.id, {
-          teamName: team.name,
-          teamLogo: extractImageUrl(team.logo || ''),
-          wins: 0,
-          podiums: 0,
-          pointsFinishes: 0,
-          poles: 0,
-          dnfs: 0
-        });
-      });
-
-      // Process each result for team stats
-      raceResults.forEach(result => {
-        const stats = teamStats.get(result.teamId);
-        if (!stats) return;
-
-        // Count pole positions (separate from race results)
-        if (result.pole) {
-          stats.poles++;
-        }
-
-        // Count DNFs/DSQs
-        if (!result.racefinished) {
-          stats.dnfs++;
-          return; // Don't count other stats for DNF
-        }
-
-        // For finished races only - count individual categories:
-        const posForStats = (result as any).finishing_position ?? result.position;
-        // Count wins (1st position only)
-        if (posForStats === 1) {
-          stats.wins++;
-          console.log(`WIN recorded for ${stats.teamName}: driver ${result.driverName} position ${posForStats}`);
-        }
-        // Count podiums (1st, 2nd, and 3rd positions - wins are included in podiums)
-        if (posForStats === 1 || posForStats === 2 || posForStats === 3) {
-          stats.podiums++;
-          console.log(`PODIUM recorded for ${stats.teamName}: driver ${result.driverName} position ${posForStats}`);
-        }
-        // Count points finishes (1st-10th positions - all points-scoring positions)
-        if (posForStats >= 1 && posForStats <= 10) {
-          stats.pointsFinishes++;
-          console.log(`POINTS FINISH recorded for ${stats.teamName}: driver ${result.driverName} position ${posForStats}`);
-        }
-      });
-
-      // Convert to array and filter out teams with no data
-      const statsArray = Array.from(teamStats.values())
-        .filter(stats => stats.wins + stats.podiums + stats.pointsFinishes + stats.poles + stats.dnfs > 0)
-        .sort((a, b) => b.wins - a.wins || b.podiums - a.podiums); // Sort by wins, then podiums
-
-      console.log('Individual team stats:', statsArray);
-
-      // For stacked bar chart, we need to structure data so each segment shows only its value
-      // The key is that Recharts will stack these values, so they represent individual segments
-      const structuredStatsArray = statsArray.map(stats => ({
-        ...stats,
-        // Keep individual values - Recharts will handle the stacking visually
-        pointsFinishes: stats.pointsFinishes, // 1st-10th (all points-scoring positions)
-        podiums: stats.podiums, // 1st-3rd (including wins)  
-        wins: stats.wins, // 1st only
-        poles: stats.poles, // poles only
-        dnfs: stats.dnfs // dnfs only
-      }));
-
-      console.log('Structured stats for chart:', structuredStatsArray);
-
-      // Debug: Check for logical inconsistencies (using original statsArray for validation)
-      statsArray.forEach(stats => {
-        console.log(`${stats.teamName}: Wins=${stats.wins}, Podiums=${stats.podiums}, Points=${stats.pointsFinishes}, Poles=${stats.poles}, DNFs=${stats.dnfs}`);
-      });
-
-      setStatsData(structuredStatsArray);
-
-      // Calculate cumulative points for each team across races
-      const teamPointsProgression = new Map<string, { [raceIndex: number]: number }>();
-
-      console.log('Processing races for progression...');
-
-      sortedSchedules.forEach((schedule, raceIndex) => {
-        const selectedTrack = selectedTrackMap.get(schedule.track);
-        console.log(`Processing schedule ${raceIndex + 1}:`, {
-          scheduleTrack: schedule.track,
-          selectedTrackFound: !!selectedTrack,
-          selectedTrackData: selectedTrack,
-          trackId: selectedTrack?.track?.id,
-          trackName: selectedTrack?.track?.name,
-          type: selectedTrack?.type
-        });
-
-        const raceResultsForTrack = raceResults.filter(r => r.track === selectedTrack?.id);
-        console.log(`  - Race results for this track:`, raceResultsForTrack);
-        console.log(`  - Filtering results: looking for track ${selectedTrack?.track?.id}, found ${raceResultsForTrack.length} results`);
-        console.log(`  - Available result tracks:`, [...new Set(raceResults.map(r => r.track))]);
-
-        console.log(`Race ${raceIndex + 1}: ${selectedTrack?.track?.name} (${schedule.date})`);
-        console.log(`  - Results for this track: ${raceResultsForTrack.length}`);
-
-        // Initialize team points for this race
-        if (raceIndex === 0) {
-          teamsData.forEach(team => {
-            teamPointsProgression.set(team.id, {});
-          });
-        }
-
-        // Calculate team points for this race
-        const teamPointsThisRace = new Map<string, number>();
-        raceResultsForTrack.forEach(result => {
-          const currentPoints = teamPointsThisRace.get(result.teamId) || 0;
-          teamPointsThisRace.set(result.teamId, currentPoints + result.points);
-        });
-
-        console.log(`  - Team points this race:`, Object.fromEntries(teamPointsThisRace));
-
-        // Update cumulative points
-        teamsData.forEach(team => {
-          const currentProgression = teamPointsProgression.get(team.id) || {};
-          const previousPoints = raceIndex > 0 ? (currentProgression[raceIndex - 1] || 0) : 0;
-          const pointsThisRace = teamPointsThisRace.get(team.id) || 0;
-          currentProgression[raceIndex] = previousPoints + pointsThisRace;
-          teamPointsProgression.set(team.id, currentProgression);
-
-          console.log(`  - Team ${team.name}: previous=${previousPoints}, this race=${pointsThisRace}, cumulative=${currentProgression[raceIndex]}`);
-        });
-      });
-
-      // Create chart data - combine race and sprint for same track
-      const chartDataArray: any[] = [];
-      let completedRoundIndex = 0;
-
-      // Group schedules by track to combine race and sprint
-      const trackGroups = new Map<string, any[]>();
-      const distributionRows: any[] = [];
-
-      sortedSchedules.forEach((schedule, originalRaceIndex) => {
-        const selectedTrack = selectedTrackMap.get(schedule.track);
-        const trackId = selectedTrack?.track?.id;
-
-        if (trackId) {
-          if (!trackGroups.has(trackId)) {
-            trackGroups.set(trackId, []);
-          }
-          trackGroups.get(trackId)!.push({
-            schedule,
-            originalRaceIndex,
-            selectedTrack
-          });
-        }
-      });
-
-      // Process each track group
-      trackGroups.forEach((schedules, trackId) => {
-        // Check if any schedule for this track has results
-        const hasResults = schedules.some(({ schedule }) => {
-          const selectedTrack = selectedTrackMap.get(schedule.track);
-          const raceResultsForTrack = raceResults.filter(r => r.track === selectedTrack?.id);
-          return raceResultsForTrack.length > 0;
-        });
-
-        if (hasResults) {
-          // Get the first schedule for this track (earliest date)
-          const firstSchedule = schedules[0];
-          const selectedTrack = firstSchedule.selectedTrack;
-
-          // Calculate combined cumulative points for this track (for progression)
-          const combinedPoints = new Map<string, number>();
-          // Calculate raw event points for this track (for distribution)
-          const rawPoints = new Map<string, number>();
-
-          schedules.forEach(({ originalRaceIndex }) => {
-            teamsData.forEach(team => {
-              const progression = teamPointsProgression.get(team.id);
-              const currentPoints = combinedPoints.get(team.id) || 0;
-              const pointsThisEvent = progression?.[originalRaceIndex] || 0;
-              combinedPoints.set(team.id, currentPoints + pointsThisEvent);
-              // Raw points for this event only = cumulative at index - cumulative at previous index
-              const prev = originalRaceIndex > 0 ? (progression?.[originalRaceIndex - 1] || 0) : 0;
-              const eventPoints = (progression?.[originalRaceIndex] || 0) - prev;
-              rawPoints.set(team.id, (rawPoints.get(team.id) || 0) + Math.max(0, eventPoints));
-            });
-          });
-
-          const dataPoint: any = {
-            race: `${selectedTrack?.track?.name || 'Unknown'} (${new Date(firstSchedule.schedule.date).toLocaleDateString()})`,
-            raceIndex: completedRoundIndex,
-            date: firstSchedule.schedule.date
-          };
-
-          teamsData.forEach(team => {
-            dataPoint[team.name] = combinedPoints.get(team.id) || 0;
-          });
-
-          chartDataArray.push(dataPoint);
-
-          // Build distribution row (horizontal stacked bars by team)
-          const distRow: any = {
-            race: `${selectedTrack?.track?.name || 'Unknown'} (${new Date(firstSchedule.schedule.date).toLocaleDateString()})`,
-            trackNameOnly: selectedTrack?.track?.name || 'Unknown',
-            selectedTrackId: selectedTrack?.id,
-            date: firstSchedule.schedule.date
-          };
-          teamsData.forEach(team => {
-            distRow[team.name] = rawPoints.get(team.id) || 0;
-          });
-          distributionRows.push(distRow);
-          completedRoundIndex++;
-        }
-      });
-
-      console.log('Final chart data:', chartDataArray);
-
-      console.log('Team progression summary:', Object.fromEntries(teamPointsProgression));
-
-      setChartData(chartDataArray);
-      // Save distribution data (sorted by date like chartData)
-      setDistributionData(distributionRows);
-
-      // Calculate ranking evolution data
-      const rankingDataArray: any[] = [];
-
-      chartDataArray.forEach((raceData, raceIndex) => {
-        // Calculate standings for this race
-        const raceStandings = teamsData.map(team => ({
-          teamId: team.id,
-          teamName: team.name,
-          points: raceData[team.name] || 0
-        })).sort((a, b) => b.points - a.points);
-
-        // Create ranking data point
-        const rankingPoint: any = {
-          race: raceData.race,
-          raceIndex: raceData.raceIndex,
-          date: raceData.date
-        };
-
-        // For the first race, all teams start at their natural positions
-        // For subsequent races, positions reflect the cumulative standings
-        raceStandings.forEach((standing, position) => {
-          rankingPoint[standing.teamName] = position + 1; // Position 1, 2, 3, etc.
-        });
-
-        rankingDataArray.push(rankingPoint);
-      });
-
-      console.log('Ranking evolution data:', rankingDataArray);
-      setRankingData(rankingDataArray);
-
-      // Calculate current constructor points for each team
-      const teamsWithPoints = teamsData.map((team) => {
-        const teamDrivers = drivers.filter((driver) => driver.team === team.id);
-        const constructorPoints = teamDrivers.reduce(
-          (sum, driver) => sum + (driver.points || 0),
-          0
-        );
-        return { ...team, constructorPoints, drivers: teamDrivers };
-      });
-
-      // Sort teams by points descending
-      const sortedTeams = [...teamsWithPoints].sort((a, b) => (b.constructorPoints || 0) - (a.constructorPoints || 0));
-      console.log('Setting teams state:', sortedTeams.length, 'teams');
-      setTeams(sortedTeams);
-      setLoading(false);
-
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      setLoading(false);
-    }
-  };
-
-  // Team color mapping
-  const teamColorMap: { [key: string]: string } = {
-    'Red Bull': 'hsl(220, 100%, 30%)',     // Red Bull - dark blue
-    'Mercedes': 'hsl(180, 100%, 50%)',     // Mercedes - cyan
-    'Mclaren': 'hsl(25, 100%, 50%)',      // McLaren - papaya orange
-    'Ferrari': 'hsl(0, 100%, 50%)',       // Ferrari - red
-    'Sauber': 'hsl(120, 100%, 40%)',      // Sauber - bright green
-    'Aston Martin': 'hsl(120, 100%, 25%)', // Aston Martin - dark green
-    'RB': 'hsl(230, 70%, 22%)',             // RB - deep navy
-    'Haas': 'hsl(0, 0%, 50%)',            // Haas - grey
-    'Alpine': 'hsl(300, 100%, 35%)',      // Alpine - dark pink
-    'Williams': 'hsl(205, 90%, 50%)',    // Williams - vivid blue
-  };
-
-  // Create chart configuration with team-based colors
-  const statsChartConfig: ChartConfig = {
-    wins: {
-      label: "Wins",
-      color: "hsl(45, 100%, 60%)", // Default fallback
-    },
-    podiums: {
-      label: "Podiums",
-      color: "hsl(210, 100%, 65%)", // Default fallback
-    },
-    pointsFinishes: {
-      label: "Points finishes (1st-10th)",
-      color: "hsl(145, 85%, 55%)", // Default fallback
-    },
-    poles: {
-      label: "Pole positions",
-      color: "hsl(285, 100%, 65%)", // Default fallback
-    },
-    dnfs: {
-      label: "DNF/DSQ",
-      color: "hsl(5, 100%, 60%)", // Default fallback
-    },
-  };
-
-  const chartConfig = useMemo(() => {
-    console.log('Creating chart config, teams state:', teams?.length || 0);
-    const config: ChartConfig = {
-      views: {
-        label: "Constructor Points",
+  // Define table columns
+  const columns: ColumnDef<Team>[] = useMemo(
+    () => [
+      {
+        accessorKey: "position",
+        header: "POS",
+        cell: ({ row }) => (
+          <span className="text-2xl font-bold text-gray-700 dark:text-gray-100">
+            {row.index + 1}
+          </span>
+        ),
       },
+      {
+        accessorKey: "name",
+        header: "CONSTRUCTOR",
+        cell: ({ row }) => {
+          const isRB = row.original.name === "RB";
+          const isStakeF1 = row.original.name === "Stake F1 Team";
+          const logoSize = isRB || isStakeF1 ? "w-14 h-14" : "w-10 h-10";
+
+          return (
+            <div className="flex items-center justify-center">
+              {row.original.logo ? (
+                <img
+                  src={extractImageUrl(row.original.logo)}
+                  alt={`${row.original.name} logo`}
+                  className={`${logoSize} object-contain bg-black/10 dark:bg-transparent rounded-lg p-1`}
+                />
+              ) : (
+                <span
+                  className={`inline-block ${logoSize} bg-gray-200 dark:bg-muted rounded-full flex-shrink-0`}
+                />
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "drivers",
+        header: "DRIVERS",
+        cell: ({ row }) => (
+          <div className="space-y-1">
+            {row.original.drivers.map((driver) => (
+              <div key={driver.id} className="text-sm text-gray-600 dark:text-gray-300">
+                {driver.name} ({driver.points || 0} pts)
+              </div>
+            ))}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "constructorPoints",
+        header: "POINTS",
+        cell: ({ row }) => (
+          <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
+            {row.original.constructorPoints}
+          </span>
+        ),
+      },
+    ],
+    []
+  );
+
+  // Chart configuration
+  const chartConfig: ChartConfig = useMemo(() => {
+    const config: ChartConfig = {
+      views: { label: "Constructor Points" },
     };
-
-    // Only add team configurations if teams data is available
-    if (teams && teams.length > 0) {
-      // Fixed team-to-color mapping to ensure consistency regardless of standings position
-      const teamColorMap: { [key: string]: string } = {
-        'Red Bull': 'hsl(220, 100%, 30%)',     // Red Bull - dark blue
-        'Mercedes': 'hsl(180, 100%, 50%)',     // Mercedes - cyan
-        'Mclaren': 'hsl(25, 100%, 50%)',      // McLaren - papaya orange
-        'Ferrari': 'hsl(0, 100%, 50%)',       // Ferrari - red
-        'Sauber': 'hsl(120, 100%, 40%)',      // Sauber - bright green
-        'Aston Martin': 'hsl(120, 100%, 25%)', // Aston Martin - dark green
-        'RB': 'hsl(230, 70%, 22%)',             // RB - deep navy
-        'Haas': 'hsl(0, 0%, 50%)',            // Haas - grey
-        'Alpine': 'hsl(300, 100%, 35%)',      // Alpine - dark pink
-        'Williams': 'hsl(205, 90%, 50%)',    // Williams - vivid blue
+    teams.forEach((team) => {
+      config[team.name] = {
+        label: team.name,
+        color: TEAM_COLOR_MAP[team.name] || "hsl(0, 0%, 70%)",
       };
-
-      teams.forEach((team) => {
-        config[team.name] = {
-          label: team.name,
-          color: teamColorMap[team.name] || 'hsl(0, 0%, 70%)', // Default color if team not found
-        };
-      });
-    }
-
-    console.log('Chart config:', config);
+    });
     return config;
   }, [teams]);
 
-  const total = useMemo(() => {
-    const totals: { [key: string]: number } = {};
-    teams.forEach(team => {
-      totals[team.name] = team.constructorPoints;
-    });
-    return totals;
-  }, [teams]);
+  const statsChartConfig: ChartConfig = {
+    wins: { label: "Wins", color: "hsl(45, 100%, 60%)" },
+    podiums: { label: "Podiums", color: "hsl(210, 100%, 65%)" },
+    pointsFinishes: {
+      label: "Points finishes (1st-10th)",
+      color: "hsl(145, 85%, 55%)",
+    },
+    poles: { label: "Pole positions", color: "hsl(285, 100%, 65%)" },
+    dnfs: { label: "DNF/DSQ", color: "hsl(5, 100%, 60%)" },
+  };
 
+  // Loading state
   if (loading) {
     return (
       <div className="p-4 md:p-8">
@@ -604,330 +152,180 @@ export default function ConstructorStandingsPage() {
             <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-primary"></div>
             <div className="absolute inset-0 rounded-full h-16 w-16 border-4 border-primary/20"></div>
           </div>
-          <div className="text-lg font-medium text-muted-foreground">Loading constructor standings...</div>
+          <div className="text-lg font-medium text-muted-foreground">
+            Loading constructor standings...
+          </div>
           <div className="text-sm text-muted-foreground/60">Fetching championship data</div>
         </div>
       </div>
     );
   }
 
-  // Evolution column removed
-
+  // Render component
   return (
     <div className="p-3 sm:p-4 md:p-8">
-      {/* Top Row: Points Progression Chart and Constructor Standings Table - Side by Side */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6 mb-4 sm:mb-6">
-        {/* Left: Constructor Standings Table */}
+        {/* Constructor Standings Table */}
         <div className="xl:col-span-4">
-          <div className="bg-white dark:bg-card rounded-2xl shadow border border-gray-200 dark:border-border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Position</TableHead>
-                  <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Constructor</TableHead>
-                  <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Drivers</TableHead>
-                  <TableHead className="py-4 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">Points</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {teams.map((team: any, idx: number) => {
-                  return (
-                    <TableRow key={team.id} className="border-b border-gray-100 dark:border-border last:border-0 hover:bg-gray-50 dark:hover:bg-muted/30 transition">
-                      <TableCell className="py-4 px-6">
-                        <div className="flex items-center gap-2">
-                          <span className="text-2xl font-bold text-gray-700 dark:text-gray-100">{idx + 1}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-4 px-6">
-                        <div className="flex items-center gap-3">
-                          {/* Team logo only */}
-                          {(() => {
-                            const logoUrl = extractImageUrl(team.logo || '');
-                            const isRB = team.name === 'RB';
-                            const isStakeF1 = team.name === 'Stake F1 Team';
-                            const logoSize = (isRB || isStakeF1) ? 'w-14 h-14' : 'w-10 h-10';
-                            const fallbackSize = (isRB || isStakeF1) ? 'w-14 h-14' : 'w-10 h-10';
-                            return logoUrl ? (
-                              <img
-                                src={logoUrl}
-                                alt={`${team.name} logo`}
-                                className={`${logoSize} object-contain bg-black/10 dark:bg-transparent rounded-lg p-1`}
-                                onError={(e) => {
-                                  e.currentTarget.style.display = 'none';
-                                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                                }}
-                              />
-                            ) : (
-                              <span className={`inline-block ${fallbackSize} bg-gray-200 dark:bg-muted rounded-full flex-shrink-0`} />
-                            );
-                          })()}
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-4 px-6">
-                        <div className="space-y-1">
-                          {team.drivers.map((driver: any) => (
-                            <div key={driver.id} className="text-sm text-gray-600 dark:text-gray-300">
-                              {driver.name} ({driver.points || 0} pts)
-                            </div>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-4 px-6">
-                        <span className="text-xl font-bold text-gray-900 dark:text-gray-100">{team.constructorPoints}</span>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+          <DataTable 
+            columns={columns} 
+            data={teams}
+            onRowClick={(team) => handleTeamClick(team.name)}
+            getRowClassName={(team) => 
+              activeTeam === team.name ? "bg-muted/70" : ""
+            }
+          />
         </div>
 
-        {/* Right: Points Progression Chart */}
+        {/* Points Progression Chart */}
         <div className="xl:col-span-8">
           <Card className="flex flex-col">
-            <CardHeader className="flex flex-col items-stretch !p-0 sm:flex-row">
-              <div className="flex flex-1 flex-col justify-center gap-1 px-6 pb-3 sm:pb-0">
-                <CardTitle>Constructor Points Progression</CardTitle>
-                <CardDescription>
-                  Points progression across all races in chronological order
-                </CardDescription>
-              </div>
-              <div className="grid grid-cols-5 lg:grid-cols-10 gap-0">
-                {teams.map((team) => {
-                  const logoUrl = extractImageUrl(team.logo || '');
-                  return (
-                    <button
-                      key={team.id}
-                      data-active={activeTeam === team.name}
-                      className="data-[active=true]:bg-muted/50 flex flex-col justify-center items-center gap-1 border-t border-r last:border-r-0 px-2 py-3 text-center sm:px-3 sm:py-4"
-                      onClick={() => setActiveTeam(activeTeam === team.name ? "all" : team.name)}
-                    >
-                      <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-black/10 dark:bg-transparent rounded-lg p-1">
-                        {logoUrl ? (
-                          <img
-                            src={logoUrl}
-                            alt={`${team.name} logo`}
-                            className="w-full h-full object-contain"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-muted rounded flex items-center justify-center text-xs font-medium">
-                            {team.name.charAt(0)}
-                          </div>
-                        )}
-                      </div>
-                      <span className="text-xs font-medium truncate max-w-[60px]">{team.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
+            <CardHeader>
+              <CardTitle>Constructor Points Progression</CardTitle>
+              <CardDescription>
+                Points progression across all races in chronological order. Click on a team in the table to isolate their line.
+              </CardDescription>
             </CardHeader>
             <CardContent className="p-0 flex-1 overflow-hidden">
               <div className="w-full h-full min-h-[450px] px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4">
-                <ChartContainer config={chartConfig} className="w-full h-full overflow-visible">
-                <LineChart accessibilityLayer data={chartData} margin={{ left: 8, right: 8, top: 6, bottom: 6 }}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="race"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    minTickGap={10}
-                    height={80}
-                    interval={0}
-                    tick={(props) => {
-                      const { x, y, payload } = props;
-                      const raceData = chartData.find((d) => d.race === payload.value);
-                      if (raceData) {
-                        const trackName = raceData.race.split(' (')[0];
-                        const track = tracks.find((t) => t.name === trackName);
-                        if (track?.img) {
-                          return (
-                            <g transform={`translate(${x},${y})`}>
-                              <foreignObject x={-15} y={15} width={30} height={20}>
-                                <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }} dangerouslySetInnerHTML={{ __html: track.img }} />
-                              </foreignObject>
-                            </g>
-                          );
+                {chartData.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    No race data available yet
+                  </div>
+                ) : (
+                  <ChartContainer
+                    config={chartConfig}
+                    className="w-full h-full overflow-visible"
+                  >
+                    <LineChart
+                    accessibilityLayer
+                    data={chartData}
+                    margin={{ left: 0, right: 20, top: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="race"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      minTickGap={5}
+                      height={36}
+                      interval={0}
+                      scale="point"
+                      padding={{ left: 10, right: 10 }}
+                      tick={(props) => {
+                        const { x, y, payload } = props as any;
+                        const raceData = chartData.find((d) => d.race === payload.value);
+                        if (raceData) {
+                          const trackName = (raceData.race as string).split(" (")[0];
+                          const track = tracks.find((t) => t.name === trackName);
+                          if (track?.img) {
+                            return (
+                              <g transform={`translate(${x},${y})`}>
+                                <foreignObject x={-12} y={4} width={24} height={16}>
+                                  <div
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      display: "flex",
+                                      justifyContent: "center",
+                                      alignItems: "center",
+                                    }}
+                                    dangerouslySetInnerHTML={{ __html: track.img }}
+                                  />
+                                </foreignObject>
+                              </g>
+                            );
+                          }
                         }
-                      }
-                      return (
-                        <g transform={`translate(${x},${y})`}>
-                          <text x={0} y={0} dy={16} textAnchor="middle" fill="#666" fontSize={12}>
-                            {raceData ? `Round ${raceData.raceIndex + 1}` : payload.value}
-                          </text>
-                        </g>
-                      );
-                    }}
-                  />
-                  <YAxis tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(value) => value.toString()} />
-                  <ChartTooltip
-                    content={({ active, payload, label }) => {
-                      if (active && payload && payload.length) {
-                        const raceData = chartData.find((d) => d.race === label);
-                        const raceName = raceData ? raceData.race : label;
                         return (
-                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                            <p className="font-medium text-sm mb-2">{raceName}</p>
-                            <p className="text-xs text-muted-foreground mb-2">Constructor championship points</p>
-                            <div className="space-y-1">
-                              {payload.map((entry: any, index: number) => {
-                                const teamName = entry.dataKey;
-                                const color = chartConfig[teamName]?.color || entry.color;
-                                return (
-                                  <div key={index} className="flex items-center gap-2 text-sm">
-                                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                                    <span className="font-medium">{teamName}</span>
-                                    <span className="ml-auto font-medium">{entry.value} pts</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  {teams.map((team) => (
-                    <Line
-                      key={team.id}
-                      dataKey={team.name}
-                      type="monotone"
-                      stroke={activeTeam === "all" || activeTeam === team.name ? chartConfig[team.name]?.color : "transparent"}
-                      strokeWidth={activeTeam === team.name ? 3 : 2}
-                      dot={activeTeam === "all" || activeTeam === team.name}
-                      hide={activeTeam !== "all" && activeTeam !== team.name}
-                      label={(props: any) => {
-                        const { x, y, index } = props;
-                        if (index === chartData.length - 1) {
-                          return (
-                            <text x={x + 16} y={y + 4} fill={chartConfig[(props as any).name]?.color || '#666'} fontSize={13} fontWeight="600" textAnchor="start">
-                              {(props as any).name}
+                          <g transform={`translate(${x},${y})`}>
+                            <text
+                              x={0}
+                              y={0}
+                              dy={12}
+                              textAnchor="middle"
+                              fill="#666"
+                              fontSize={12}
+                            >
+                              {raceData ? `Round ${raceData.raceIndex + 1}` : payload.value}
                             </text>
-                          );
-                        }
-                        return <></>;
+                          </g>
+                        );
                       }}
                     />
-                  ))}
-                </LineChart>
-              </ChartContainer>
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      tick={{ fontSize: 12 }}
+                      width={40}
+                      domain={[0, "dataMax + 10"]}
+                      allowDataOverflow={false}
+                    />
+                    <ChartTooltip
+                      cursor={true}
+                      content={(props) => (
+                        <ProgressionTooltip
+                          {...props}
+                          chartData={chartData}
+                          tracks={tracks}
+                          chartConfig={chartConfig}
+                          hoveredTeam={hoveredProgressionTeam}
+                        />
+                      )}
+                    />
+                    {teams.map((team) => {
+                      const isHovered = hoveredProgressionTeam === team.name;
+                      const isOtherHovered =
+                        hoveredProgressionTeam && hoveredProgressionTeam !== team.name;
+                      const lineColor = chartConfig[team.name]?.color || "hsl(0, 0%, 70%)";
+
+                      return (
+                        <Line
+                          key={team.id}
+                          dataKey={team.name}
+                          type="monotone"
+                          stroke={lineColor}
+                          strokeWidth={isHovered ? 4 : activeTeam === team.name ? 3 : 2}
+                          strokeOpacity={isOtherHovered ? 0.15 : 1}
+                          connectNulls={true}
+                          dot={{
+                            r: 4,
+                            strokeWidth: 2,
+                            stroke: lineColor,
+                            fill: lineColor,
+                            onMouseEnter: () => setHoveredProgressionTeam(team.name),
+                            onMouseLeave: () => setHoveredProgressionTeam(null),
+                            style: { cursor: "pointer" },
+                          }}
+                          activeDot={{
+                            r: isHovered ? 8 : 4,
+                            strokeWidth: 2,
+                            stroke: lineColor,
+                            fill: lineColor,
+                            onMouseEnter: () => setHoveredProgressionTeam(team.name),
+                            onMouseLeave: () => setHoveredProgressionTeam(null),
+                          }}
+                          hide={activeTeam !== "all" && activeTeam !== team.name}
+                          onMouseEnter={() => setHoveredProgressionTeam(team.name)}
+                          onMouseLeave={() => setHoveredProgressionTeam(null)}
+                          style={{ cursor: "pointer" }}
+                        />
+                      );
+                    })}
+                  </LineChart>
+                </ChartContainer>
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Ranking Evolution and Points Distribution - Side by Side Row */}
+      {/* Bottom row: Points Distribution and Ranking Evolution */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4 sm:mt-6">
-        {/* Constructor Ranking Evolution Chart */}
-        <Card className="flex flex-col">
-          <CardHeader>
-            <CardTitle>Constructor Ranking Evolution</CardTitle>
-            <CardDescription>
-              Position changes in the constructor standings across rounds
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0 flex-1 overflow-hidden">
-            <div className="w-full h-full min-h-[450px] px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4">
-              <ChartContainer config={chartConfig} className="w-full h-full overflow-visible">
-              <LineChart accessibilityLayer data={rankingData} margin={{ left: 8, right: 120, top: 6, bottom: 6 }}>
-                <CartesianGrid vertical={false} />
-                <XAxis
-                  dataKey="race"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  minTickGap={10}
-                  height={80}
-                  interval={0}
-                  tick={(props) => {
-                    const { x, y, payload } = props;
-                    const raceData = rankingData.find((d) => d.race === payload.value);
-                    if (raceData) {
-                      const trackName = raceData.race.split(' (')[0];
-                      const track = tracks.find((t) => t.name === trackName);
-                      if (track?.img) {
-                        return (
-                          <g transform={`translate(${x},${y})`}>
-                            <foreignObject x={-15} y={15} width={30} height={20}>
-                              <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }} dangerouslySetInnerHTML={{ __html: track.img }} />
-                            </foreignObject>
-                          </g>
-                        );
-                      }
-                    }
-                    return (
-                      <g transform={`translate(${x},${y})`}>
-                        <text x={0} y={0} dy={16} textAnchor="middle" fill="#666" fontSize={12}>
-                          {raceData ? `Round ${raceData.raceIndex + 1}` : payload.value}
-                        </text>
-                      </g>
-                    );
-                  }}
-                />
-                <YAxis tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(value) => value.toString()} reversed={true} domain={[1, teams.length]} />
-                <ChartTooltip
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      const raceData = chartData.find((d) => d.race === label);
-                      const raceName = raceData ? raceData.race : label;
-                      return (
-                        <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                          <p className="font-medium text-sm mb-2">{raceName}</p>
-                          <p className="text-xs text-muted-foreground mb-2">Constructor championship position</p>
-                          <div className="space-y-1">
-                            {payload.map((entry: any, index: number) => {
-                              const teamName = entry.dataKey;
-                              const color = chartConfig[teamName]?.color || entry.color;
-                              return (
-                                <div key={index} className="flex items-center gap-2 text-sm">
-                                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                                  <span className="font-medium">{teamName}</span>
-                                  <span className="text-muted-foreground">Position {entry.value}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                {teams.map((team) => (
-                  <Line
-                    key={team.id}
-                    dataKey={team.name}
-                    type="monotone"
-                    stroke={activeTeam === "all" || activeTeam === team.name ? chartConfig[team.name]?.color : "transparent"}
-                    strokeWidth={activeTeam === team.name ? 3 : 2}
-                    dot={activeTeam === "all" || activeTeam === team.name}
-                    hide={activeTeam !== "all" && activeTeam !== team.name}
-                    label={(props: any) => {
-                      const { x, y, index } = props;
-                      if (index === rankingData.length - 1) {
-                        return (
-                          <text x={x + 16} y={y + 4} fill={chartConfig[(props as any).name]?.color || '#666'} fontSize={13} fontWeight="600" textAnchor="start">
-                            {(props as any).name}
-                          </text>
-                        );
-                      }
-                      return <></>;
-                    }}
-                  />
-                ))}
-              </LineChart>
-            </ChartContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Points Distribution by Track (Horizontal Stacked Bars) */}
+        {/* Points Distribution Chart */}
         <Card className="flex flex-col">
           <CardHeader>
             <CardTitle>Points Distribution</CardTitle>
@@ -942,106 +340,259 @@ export default function ConstructorStandingsPage() {
                 className="w-full"
                 style={{ height: Math.max(400, distributionData.length * 40) }}
               >
-              <BarChart
-                accessibilityLayer
-                data={distributionData}
-                layout="vertical"
-                margin={{ left: 0, right: 16, top: 6, bottom: 6 }}
-              >
-                <CartesianGrid horizontal={true} vertical={false} strokeDasharray="3 3" />
-                <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 12 }} domain={[0, 'auto']} allowDataOverflow height={20} />
-                <YAxis
-                  type="category"
-                  dataKey="trackNameOnly"
-                  width={140}
-                  tickLine={false}
-                  axisLine={false}
-                  tick={(props: any) => {
-                    const { x, y, payload } = props;
-                    const trackName = payload.value as string;
-                    const track = tracks.find((t) => t.name === trackName);
-                    if (track?.img) {
+                <BarChart
+                  accessibilityLayer
+                  data={distributionData}
+                  layout="vertical"
+                  margin={{ left: 0, right: 16, top: 6, bottom: 0 }}
+                >
+                  <CartesianGrid horizontal={true} vertical={false} strokeDasharray="3 3" />
+                  <XAxis
+                    type="number"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 12 }}
+                    domain={[0, "auto"]}
+                    allowDataOverflow
+                    height={20}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="trackNameOnly"
+                    width={30}
+                    tickLine={false}
+                    axisLine={false}
+                    tick={(props: any) => {
+                      const { x, y, payload } = props;
+                      const trackName = payload.value as string;
+                      const track = tracks.find((t) => t.name === trackName);
+                      if (track?.img) {
+                        return (
+                          <g transform={`translate(${x},${y})`}>
+                            <foreignObject x={-26} y={-10} width={24} height={16}>
+                              <div
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  display: "flex",
+                                  justifyContent: "center",
+                                  alignItems: "center",
+                                }}
+                                dangerouslySetInnerHTML={{ __html: track.img }}
+                              />
+                            </foreignObject>
+                          </g>
+                        );
+                      }
                       return (
                         <g transform={`translate(${x},${y})`}>
-                          <foreignObject x={-26} y={-10} width={24} height={16}>
-                            <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }} dangerouslySetInnerHTML={{ __html: track.img }} />
-                          </foreignObject>
+                          <text
+                            x={0}
+                            y={0}
+                            dy={4}
+                            textAnchor="end"
+                            fill="#666"
+                            fontSize={12}
+                          >
+                            {trackName}
+                          </text>
                         </g>
                       );
-                    }
-                    return (
-                      <g transform={`translate(${x},${y})`}>
-                        <text x={0} y={0} dy={4} textAnchor="end" fill="#666" fontSize={12}>
-                          {trackName}
-                        </text>
-                      </g>
-                    );
-                  }}
-                />
-                <ChartTooltip
-                  content={({ active, payload, label }) => {
-                    if (!active || !payload || !payload.length) return null;
-                    const entries = hoveredTeam
-                      ? payload.filter((p: any) => p.dataKey === hoveredTeam)
-                      : [payload.find((p: any) => typeof p.value === 'number' && p.value > 0) || payload[0]];
-                    return (
-                      <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                        <p className="font-medium text-sm mb-2">{label}</p>
-                        <p className="text-xs text-muted-foreground mb-2">Points earned at this track</p>
-                        <div className="space-y-1">
-                          {entries.filter(Boolean).map((entry: any, idx: number) => {
-                            const name = entry.dataKey as string;
-                            const color = chartConfig[name]?.color || entry.color;
-                            return (
-                              <div key={`${name}-${idx}`} className="flex items-center gap-2 text-sm">
-                                <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
-                                <span>{name}</span>
-                                <span className="ml-auto font-medium">{entry.value} pts</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  }}
-                />
-                {teams.map((team) => (
-                  <Bar
-                    key={`dist-${team.id}`}
-                    dataKey={team.name}
-                    stackId="distribution"
-                    radius={[0, 0, 0, 0]}
-                    fill={chartConfig[team.name]?.color}
-                    onMouseMove={() => setHoveredTeam(team.name)}
-                    onMouseLeave={() => setHoveredTeam(null)}
+                    }}
                   />
-                ))}
-              </BarChart>
-            </ChartContainer>
+                  <ChartTooltip
+                    content={(props) => (
+                      <DistributionTooltip
+                        {...props}
+                        tracks={tracks}
+                        chartConfig={chartConfig}
+                        hoveredTeam={hoveredDistributionTeam}
+                      />
+                    )}
+                  />
+                  {teams.map((team) => (
+                    <Bar
+                      key={`dist-${team.id}`}
+                      dataKey={team.name}
+                      stackId="distribution"
+                      radius={[0, 0, 0, 0]}
+                      fill={chartConfig[team.name]?.color}
+                      stroke="#000"
+                      strokeWidth={1}
+                      onMouseMove={() => setHoveredDistributionTeam(team.name)}
+                      onMouseLeave={() => setHoveredDistributionTeam(null)}
+                    />
+                  ))}
+                </BarChart>
+              </ChartContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Constructor Ranking Evolution Chart */}
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle>Constructor Ranking Evolution</CardTitle>
+            <CardDescription>
+              Position changes in the constructor standings across rounds
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0 flex-1 overflow-hidden">
+            <div className="w-full h-full min-h-[450px] px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4">
+              <ChartContainer
+                config={chartConfig}
+                className="w-full h-full overflow-visible"
+              >
+                <LineChart
+                  accessibilityLayer
+                  data={rankingData}
+                  margin={{ left: 5, right: 20, top: 15, bottom: 5 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="race"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    minTickGap={5}
+                    height={36}
+                    interval={0}
+                    scale="point"
+                    padding={{ left: 10, right: 10 }}
+                    tick={(props) => {
+                      const { x, y, payload } = props as any;
+                      const raceData = rankingData.find((d) => d.race === payload.value);
+                      if (raceData) {
+                        const trackName = (raceData.race as string).split(" (")[0];
+                        const track = tracks.find((t) => t.name === trackName);
+                        if (track?.img) {
+                          return (
+                            <g transform={`translate(${x},${y})`}>
+                              <foreignObject x={-15} y={4} width={30} height={20}>
+                                <div
+                                  style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    display: "flex",
+                                    justifyContent: "center",
+                                    alignItems: "center",
+                                  }}
+                                  dangerouslySetInnerHTML={{ __html: track.img }}
+                                />
+                              </foreignObject>
+                            </g>
+                          );
+                        }
+                      }
+                      return (
+                        <g transform={`translate(${x},${y})`}>
+                          <text
+                            x={0}
+                            y={0}
+                            dy={12}
+                            textAnchor="middle"
+                            fill="#666"
+                            fontSize={12}
+                          >
+                            {raceData ? `Round ${raceData.raceIndex + 1}` : payload.value}
+                          </text>
+                        </g>
+                      );
+                    }}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => value.toString()}
+                    reversed={true}
+                    domain={[1, teams.length]}
+                    ticks={Array.from({ length: teams.length }, (_, i) => i + 1)}
+                    tick={{ fontSize: 12 }}
+                    width={30}
+                  />
+                  <ChartTooltip
+                    cursor={true}
+                    content={(props) => (
+                      <RankingTooltip
+                        {...props}
+                        rankingData={rankingData}
+                        tracks={tracks}
+                        chartConfig={chartConfig}
+                        hoveredTeam={hoveredRankingTeam}
+                      />
+                    )}
+                  />
+                  {teams.map((team) => {
+                    const isHovered = hoveredRankingTeam === team.name;
+                    const isOtherHovered =
+                      hoveredRankingTeam && hoveredRankingTeam !== team.name;
+                    const lineColor = chartConfig[team.name]?.color || "hsl(0, 0%, 70%)";
+
+                    return (
+                      <Line
+                        key={team.id}
+                        dataKey={team.name}
+                        type="monotone"
+                        stroke={
+                          activeTeam === "all" || activeTeam === team.name
+                            ? lineColor
+                            : "transparent"
+                        }
+                        strokeWidth={isHovered ? 6 : activeTeam === team.name ? 3 : 2}
+                        strokeOpacity={isOtherHovered ? 0.15 : 1}
+                        dot={
+                          activeTeam === "all" || activeTeam === team.name
+                            ? {
+                                r: 5,
+                                strokeWidth: 2,
+                                stroke: lineColor,
+                                fill: lineColor,
+                                onMouseEnter: () => setHoveredRankingTeam(team.name),
+                                onMouseLeave: () => setHoveredRankingTeam(null),
+                                style: { cursor: "pointer" },
+                              }
+                            : false
+                        }
+                        activeDot={{
+                          r: isHovered ? 10 : 5,
+                          strokeWidth: 2,
+                          stroke: lineColor,
+                          fill: lineColor,
+                          fillOpacity: isHovered ? 0.4 : 1,
+                          onMouseEnter: () => setHoveredRankingTeam(team.name),
+                          onMouseLeave: () => setHoveredRankingTeam(null),
+                        }}
+                        hide={activeTeam !== "all" && activeTeam !== team.name}
+                        onMouseEnter={() => setHoveredRankingTeam(team.name)}
+                        onMouseLeave={() => setHoveredRankingTeam(null)}
+                        style={{ cursor: "pointer" }}
+                      />
+                    );
+                  })}
+                </LineChart>
+              </ChartContainer>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Bottom row: Stats Bar Chart - Full Width */}
+      {/* Stats Bar Chart - Full Width */}
       <div className="mt-4 sm:mt-6">
-        {/* Stats Bar Chart - Full Width */}
         <Card>
           <CardHeader>
             <CardTitle>Stats</CardTitle>
-            <CardDescription>Wins (1st), podiums (1st-3rd), points finishes (1st-10th), pole positions, and DNFs by team</CardDescription>
+            <CardDescription>
+              Wins (1st), podiums (1st-3rd), points finishes (1st-10th), pole positions, and
+              DNFs by team
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-4 sm:px-6 sm:pt-6 sm:pb-4">
             <ChartContainer config={statsChartConfig} className="w-full h-[600px]">
               <BarChart
                 accessibilityLayer
                 data={statsData}
-                margin={{
-                  left: 20,
-                  right: 20,
-                  top: 20,
-                  bottom: 20,
-                }}
+                margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
                 barCategoryGap="15%"
                 barGap={4}
               >
@@ -1055,16 +606,39 @@ export default function ConstructorStandingsPage() {
                   interval={0}
                   tick={(props: any) => {
                     const { x, y, payload } = props;
-                    const team = teams.find(t => t.name === payload.value);
-                    const logoUrl = team ? extractImageUrl(team.logo || '') : '';
+                    const team = teams.find((t) => t.name === payload.value);
+                    const logoUrl = team ? extractImageUrl(team.logo || "") : "";
                     return (
                       <g transform={`translate(${x},${y})`}>
                         <foreignObject x={-15} y={-10} width={30} height={20}>
-                          <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                          <div
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                            }}
+                          >
                             {logoUrl ? (
-                              <img src={logoUrl} alt={`${payload.value} logo`} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                              <img
+                                src={logoUrl}
+                                alt={`${payload.value} logo`}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "contain",
+                                }}
+                              />
                             ) : (
-                              <div style={{ width: '100%', height: '100%', backgroundColor: '#ccc', borderRadius: '2px' }} />
+                              <div
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  backgroundColor: "#ccc",
+                                  borderRadius: "2px",
+                                }}
+                              />
                             )}
                           </div>
                         </foreignObject>
@@ -1076,32 +650,39 @@ export default function ConstructorStandingsPage() {
                 <ChartTooltip
                   content={({ active, payload, label }) => {
                     if (active && payload && payload.length && label) {
-                      const team = teams.find(t => t.name === label);
-                      const logoUrl = team ? extractImageUrl(team.logo || '') : '';
+                      const team = teams.find((t) => t.name === label);
+                      const logoUrl = team ? extractImageUrl(team.logo || "") : "";
                       return (
                         <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
                           <div className="flex items-center gap-2 mb-2">
                             {logoUrl && (
-                              <img src={logoUrl} alt={`${label} team logo`} className="w-5 h-5 object-contain bg-black/10 dark:bg-transparent rounded p-0.5" />
+                              <img
+                                src={logoUrl}
+                                alt={`${label} team logo`}
+                                className="w-5 h-5 object-contain bg-black/10 dark:bg-transparent rounded p-0.5"
+                              />
                             )}
                             <p className="font-medium text-sm">{label}</p>
                           </div>
                           <p className="text-xs text-muted-foreground mb-2">Season statistics</p>
                           <div className="space-y-1">
                             {[
-                              { key: 'pointsFinishes', label: 'Points Finishes (1st-10th)' },
-                              { key: 'podiums', label: 'Podiums (1st-3rd)' },
-                              { key: 'wins', label: 'Wins (1st)' },
-                              { key: 'poles', label: 'Poles' },
-                              { key: 'dnfs', label: 'DNFs' },
+                              { key: "pointsFinishes", label: "Points Finishes (1st-10th)" },
+                              { key: "podiums", label: "Podiums (1st-3rd)" },
+                              { key: "wins", label: "Wins (1st)" },
+                              { key: "poles", label: "Poles" },
+                              { key: "dnfs", label: "DNFs" },
                             ].map((stat, idx) => {
                               const entry = payload.find((p: any) => p.dataKey === stat.key);
                               const value = entry?.value || 0;
                               const colors = getTeamColorVariations(label);
-                              const color = (colors as any)[stat.key] || '#999';
+                              const color = (colors as any)[stat.key] || "#999";
                               return (
                                 <div key={idx} className="flex items-center gap-2 text-sm">
-                                  <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
+                                  <span
+                                    className="w-3 h-3 rounded-sm"
+                                    style={{ backgroundColor: color }}
+                                  />
                                   <span>{stat.label}</span>
                                   <span className="ml-auto font-medium">{value}</span>
                                 </div>
@@ -1113,108 +694,31 @@ export default function ConstructorStandingsPage() {
                     }
                     return null;
                   }}
-                  cursor={{ fill: 'rgba(0, 0, 0, 0.1)' }}
+                  cursor={{ fill: "rgba(0, 0, 0, 0.1)" }}
                 />
-                {/* Points Finishes */}
-                <Bar dataKey="pointsFinishes" radius={[4, 4, 0, 0]} shape={(p: any) => {
-                  const teamColors = getTeamColorVariations(p.payload?.teamName);
-                  const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
-                  const r = Array.isArray(radius) ? radius[0] : (radius || 0);
-                  return (
-                    <rect
-                      x={x}
-                      y={y}
-                      width={width}
-                      height={height}
-                      rx={r}
-                      ry={r}
-                      fill={teamColors.pointsFinishes}
-                      onMouseEnter={onMouseEnter}
-                      onMouseLeave={onMouseLeave}
-                      onClick={onClick}
-                    />
-                  );
-                }} />
-                {/* Podiums */}
-                <Bar dataKey="podiums" radius={[4, 4, 0, 0]} shape={(p: any) => {
-                  const teamColors = getTeamColorVariations(p.payload?.teamName);
-                  const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
-                  const r = Array.isArray(radius) ? radius[0] : (radius || 0);
-                  return (
-                    <rect
-                      x={x}
-                      y={y}
-                      width={width}
-                      height={height}
-                      rx={r}
-                      ry={r}
-                      fill={teamColors.podiums}
-                      onMouseEnter={onMouseEnter}
-                      onMouseLeave={onMouseLeave}
-                      onClick={onClick}
-                    />
-                  );
-                }} />
-                {/* Wins */}
-                <Bar dataKey="wins" radius={[4, 4, 0, 0]} shape={(p: any) => {
-                  const teamColors = getTeamColorVariations(p.payload?.teamName);
-                  const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
-                  const r = Array.isArray(radius) ? radius[0] : (radius || 0);
-                  return (
-                    <rect
-                      x={x}
-                      y={y}
-                      width={width}
-                      height={height}
-                      rx={r}
-                      ry={r}
-                      fill={teamColors.wins}
-                      onMouseEnter={onMouseEnter}
-                      onMouseLeave={onMouseLeave}
-                      onClick={onClick}
-                    />
-                  );
-                }} />
-                {/* Poles */}
-                <Bar dataKey="poles" radius={[4, 4, 0, 0]} shape={(p: any) => {
-                  const teamColors = getTeamColorVariations(p.payload?.teamName);
-                  const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
-                  const r = Array.isArray(radius) ? radius[0] : (radius || 0);
-                  return (
-                    <rect
-                      x={x}
-                      y={y}
-                      width={width}
-                      height={height}
-                      rx={r}
-                      ry={r}
-                      fill={teamColors.poles}
-                      onMouseEnter={onMouseEnter}
-                      onMouseLeave={onMouseLeave}
-                      onClick={onClick}
-                    />
-                  );
-                }} />
-                {/* DNFs */}
-                <Bar dataKey="dnfs" radius={[4, 4, 0, 0]} shape={(p: any) => {
-                  const teamColors = getTeamColorVariations(p.payload?.teamName);
-                  const { x, y, width, height, radius, onMouseEnter, onMouseLeave, onMouseMove, onClick } = p;
-                  const r = Array.isArray(radius) ? radius[0] : (radius || 0);
-                  return (
-                    <rect
-                      x={x}
-                      y={y}
-                      width={width}
-                      height={height}
-                      rx={r}
-                      ry={r}
-                      fill={teamColors.dnfs}
-                      onMouseEnter={onMouseEnter}
-                      onMouseLeave={onMouseLeave}
-                      onClick={onClick}
-                    />
-                  );
-                }} />
+                {["pointsFinishes", "podiums", "wins", "poles", "dnfs"].map((stat) => (
+                  <Bar
+                    key={stat}
+                    dataKey={stat}
+                    radius={[4, 4, 0, 0]}
+                    shape={(p: any) => {
+                      const teamColors = getTeamColorVariations(p.payload?.teamName);
+                      const { x, y, width, height, radius } = p;
+                      const r = Array.isArray(radius) ? radius[0] : radius || 0;
+                      return (
+                        <rect
+                          x={x}
+                          y={y}
+                          width={width}
+                          height={height}
+                          rx={r}
+                          ry={r}
+                          fill={(teamColors as any)[stat]}
+                        />
+                      );
+                    }}
+                  />
+                ))}
               </BarChart>
             </ChartContainer>
           </CardContent>

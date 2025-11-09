@@ -10,12 +10,16 @@ import {
 export interface DataTableProps<TData> {
   columns: ColumnDef<TData, any>[];
   data: TData[];
+  onRowClick?: (row: TData) => void;
+  getRowClassName?: (row: TData) => string;
 }
 
 // Default generic (TData = any) so columns/data props are recognized without explicit <T> usage
 export default function DataTable<TData = any>({
   columns,
   data,
+  onRowClick,
+  getRowClassName,
 }: DataTableProps<TData>) {
   const table = useReactTable({
     data,
@@ -51,7 +55,10 @@ export default function DataTable<TData = any>({
           {table.getRowModel().rows.map((row) => (
             <tr
               key={row.id}
-              className="hover:bg-muted/50 transition-colors"
+              className={`hover:bg-muted/50 transition-colors ${
+                onRowClick ? "cursor-pointer" : ""
+              } ${getRowClassName ? getRowClassName(row.original) : ""}`}
+              onClick={() => onRowClick?.(row.original)}
             >
               {row.getVisibleCells().map((cell) => (
                 <td
