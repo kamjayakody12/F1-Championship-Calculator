@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import DataTable from "@/components/data-table";
 import {
@@ -31,6 +31,7 @@ import { TEAM_COLOR_MAP } from "./hooks/constants";
 import { ProgressionTooltip } from "./components/ProgressionTooltip";
 import { DistributionTooltip } from "./components/DistributionTooltip";
 import { RankingTooltip } from "./components/RankingTooltip";
+import { useSearchParams } from "next/navigation";
 
 export default function DriverStandingsPage() {
   // State management
@@ -53,6 +54,14 @@ export default function DriverStandingsPage() {
     tracks,
     loading,
   } = useDriverStandings();
+
+  // Deep-link support: /public-dash/driver-standings?driver=...
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const driverParam = searchParams.get("driver");
+    if (!driverParam) return;
+    setActiveDriver(driverParam === "all" ? "all" : driverParam);
+  }, [searchParams]);
 
   // Define table columns
   const columns: ColumnDef<DriverRow>[] = useMemo(

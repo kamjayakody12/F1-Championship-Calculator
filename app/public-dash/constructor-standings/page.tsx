@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import DataTable from "@/components/data-table";
 import {
@@ -31,6 +31,7 @@ import { TEAM_COLOR_MAP, extractImageUrl, getTeamColorVariations } from "./hooks
 import { ProgressionTooltip } from "./components/ProgressionTooltip";
 import { DistributionTooltip } from "./components/DistributionTooltip";
 import { RankingTooltip } from "./components/RankingTooltip";
+import { useSearchParams } from "next/navigation";
 
 export default function ConstructorStandingsPage() {
   // State management
@@ -49,6 +50,14 @@ export default function ConstructorStandingsPage() {
     tracks,
     loading,
   } = useConstructorStandings();
+
+  // Deep-link support: /public-dash/constructor-standings?team=...
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const teamParam = searchParams.get("team");
+    if (!teamParam) return;
+    setActiveTeam(teamParam === "all" ? "all" : teamParam);
+  }, [searchParams]);
 
   // Handle row click
   const handleTeamClick = (teamName: string) => {

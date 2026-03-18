@@ -317,18 +317,21 @@ export default async function HomePage() {
   // Prepare teams data with driver relationships
   // ========================================
 
-  const teams = (teamsData || []).map((team: any) => {
-    const teamDrivers = (drivers || []).filter((driver: any) => driver.team === team.id);
-    const constructorPoints = teamDrivers.reduce(
-      (sum: number, driver: any) => sum + (driver.points || 0),
-      0
-    );
-    return {
-      ...team,
-      constructorPoints,
-      drivers: teamDrivers
-    };
-  });
+  const teams = (teamsData || [])
+    .map((team: any) => {
+      const teamDrivers = (drivers || []).filter((driver: any) => driver.team === team.id);
+      const constructorPoints = teamDrivers.reduce(
+        (sum: number, driver: any) => sum + (driver.points || 0),
+        0
+      );
+      return {
+        ...team,
+        constructorPoints,
+        drivers: teamDrivers
+      };
+    })
+    // Only keep teams that actually have at least one driver
+    .filter((team: any) => (team.drivers || []).length > 0);
 
   // ========================================
   // Calculate evolution for drivers

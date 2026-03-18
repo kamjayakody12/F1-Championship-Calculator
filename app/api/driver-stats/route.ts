@@ -84,7 +84,12 @@ export async function GET() {
       };
     });
 
-    // STEP 4: Return all data in a single response
+    // STEP 4: Filter out teams with no drivers assigned
+    const teamsWithDrivers = (teams || []).filter((team: any) =>
+      (drivers || []).some((driver: any) => driver.team === team.id)
+    );
+
+    // STEP 5: Return all data in a single response
     // Frontend will use this data to calculate:
     // - Driver standings (from drivers array)
     // - Points progression (from results + selectedTracks)
@@ -92,7 +97,7 @@ export async function GET() {
     // - Ranking evolution (from results over time)
     return NextResponse.json({
       drivers,                          // Driver standings data
-      teams,                            // Team standings data
+      teams: teamsWithDrivers,          // Team standings data (only active teams)
       results: resultsWithTrackNames,   // Race results with track names
       tracks,                           // All available tracks
       selectedTracks,                   // Current season tracks

@@ -69,12 +69,7 @@ const data = {
       title: "Constructor Standings",
       url: "/public-dash/constructor-standings",
       icon: Crown,
-    },
-    {
-      title: "Teams",
-      url: "/public-dash/teams",
-      icon: IconUsersGroup,
-    },     
+    },   
     {
       title: "Drivers",
       url: "/public-dash/driver",

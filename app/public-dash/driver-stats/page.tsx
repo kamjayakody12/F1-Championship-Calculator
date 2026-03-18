@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/db";
+import { useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -106,6 +107,9 @@ export default function DriverStatsPage() {
   const [loading, setLoading] = useState(true);
   const [themeKey, setThemeKey] = useState(0);
 
+  const searchParams = useSearchParams();
+  const urlDriverId = useMemo(() => searchParams.get("driverId"), [searchParams]);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -175,7 +179,7 @@ export default function DriverStatsPage() {
       setDrivers(processedDrivers);
       
       // Set first driver as default
-      if (processedDrivers.length > 0) {
+      if (!urlDriverId && processedDrivers.length > 0) {
         setSelectedDriver(processedDrivers[0].id);
       }
       
@@ -185,6 +189,13 @@ export default function DriverStatsPage() {
       setLoading(false);
     }
   };
+
+  // Deep-link: preselect driver if driverId is provided in the URL.
+  useEffect(() => {
+    if (urlDriverId) {
+      setSelectedDriver(urlDriverId);
+    }
+  }, [urlDriverId]);
 
   const fetchDriverStats = async (driverId: string) => {
     try {
