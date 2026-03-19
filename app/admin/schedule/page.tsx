@@ -12,6 +12,7 @@ import {
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
 interface TrackRow {
@@ -23,17 +24,36 @@ interface TrackRow {
 
 export default function ManageSchedulesPage() {
   const [tracks, setTracks] = useState<TrackRow[]>([]);
+  const [seasons, setSeasons] = useState<any[]>([]);
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
+  const [isCreatingSeason, setIsCreatingSeason] = useState(false);
+  const [isSavingSeason, setIsSavingSeason] = useState(false);
+  const [isDeletingSeason, setIsDeletingSeason] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
+        const seasonsRes = await fetch("/api/season-manager");
+        const seasonsData = await seasonsRes.json();
+        if (Array.isArray(seasonsData)) {
+          setSeasons(seasonsData);
+          if (!selectedSeasonId && seasonsData[0]?.id) {
+            setSelectedSeasonId(seasonsData[0].id);
+          }
+        }
+
+        if (!selectedSeasonId && !seasonsData?.[0]?.id) {
+          setTracks([]);
+          return;
+        }
+
         // load only the tracks you've marked "selected"
-        const selRes = await fetch("/api/selected-tracks");
+        const selRes = await fetch(`/api/selected-tracks${selectedSeasonId ? `?seasonId=${encodeURIComponent(selectedSeasonId)}` : ""}`);
         const selected: { id: string; track: { name: string }; type: string }[] =
           await selRes.json();
 
         // load any existing schedules for those tracks
-        const schedRes = await fetch("/api/schedules");
+        const schedRes = await fetch(`/api/schedules${selectedSeasonId ? `?seasonId=${encodeURIComponent(selectedSeasonId)}` : ""}`);
         const schedulesResponse = await schedRes.json();
         
                  // Ensure schedules is an array
@@ -60,7 +80,7 @@ export default function ManageSchedulesPage() {
       }
     }
     load();
-  }, []);
+  }, [selectedSeasonId]);
 
   function handleDateChange(selectedTrackId: string, newIso: string) {
     setTracks((prev) =>
@@ -69,17 +89,113 @@ export default function ManageSchedulesPage() {
   }
 
   async function saveAll() {
+    if (!selectedSeasonId) {
+      toast.error("Please create/select a season first.");
+      return;
+    }
     // upsert each schedule
     await Promise.all(
       tracks.map((t) =>
         fetch("/api/schedules", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ selectedTrack: t.selectedTrackId, date: t.date }),
+          body: JSON.stringify({ selectedTrack: t.selectedTrackId, date: t.date, seasonId: selectedSeasonId }),
         })
       )
     );
     toast.success("Schedule saved!");
+  }
+
+  async function addSeason() {
+    const selectedSeason = seasons.find((s: any) => s.id === selectedSeasonId);
+    const hasCurrentSeason = !!selectedSeason;
+    const hasTracks = tracks.length > 0;
+    const allDatesSet = tracks.every((t) => !!t.date);
+
+    if (hasCurrentSeason && (!hasTracks || !allDatesSet)) {
+      toast.error("Before adding a new season, make sure current season has tracks and all schedules are set.");
+      return;
+    }
+
+    setIsCreatingSeason(true);
+    try {
+      const res = await fetch("/api/season-manager", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data?.error || "Failed to create season");
+        return;
+      }
+
+      const refreshedSeasons = await fetch("/api/season-manager").then((r) => r.json());
+      if (Array.isArray(refreshedSeasons)) {
+        setSeasons(refreshedSeasons);
+      }
+      if (data?.id) {
+        setSelectedSeasonId(data.id);
+        setTracks([]);
+      }
+      toast.success(`Season ${data?.season_number} created`);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to create season");
+    } finally {
+      setIsCreatingSeason(false);
+    }
+  }
+
+  async function saveSeason(finalize: boolean = false) {
+    if (!selectedSeasonId) {
+      toast.error("Please select a season first.");
+      return;
+    }
+    setIsSavingSeason(true);
+    try {
+      const res = await fetch("/api/season-manager", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonId: selectedSeasonId, finalize }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data?.error || "Failed to save season");
+        return;
+      }
+      toast.success(finalize ? "Season saved and finalized" : "Season saved");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to save season");
+    } finally {
+      setIsSavingSeason(false);
+    }
+  }
+
+  async function deleteSeason() {
+    if (!selectedSeasonId) {
+      toast.error("Please select a season to delete.");
+      return;
+    }
+    setIsDeletingSeason(true);
+    try {
+      const res = await fetch("/api/season-manager", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonId: selectedSeasonId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data?.error || "Failed to delete season");
+        return;
+      }
+
+      const refreshedSeasons = await fetch("/api/season-manager").then((r) => r.json());
+      if (Array.isArray(refreshedSeasons)) {
+        setSeasons(refreshedSeasons);
+        setSelectedSeasonId(refreshedSeasons[0]?.id || "");
+      }
+      toast.success("Season deleted");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete season");
+    } finally {
+      setIsDeletingSeason(false);
+    }
   }
 
   return (
@@ -87,6 +203,34 @@ export default function ManageSchedulesPage() {
       <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
         Manage Track Schedule
       </h1>
+      <div className="flex items-center gap-3 flex-wrap max-w-5xl">
+        <div className="w-64">
+          <Select value={selectedSeasonId} onValueChange={setSelectedSeasonId}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select season" />
+            </SelectTrigger>
+            <SelectContent>
+              {seasons.map((s: any) => (
+                <SelectItem key={s.id} value={s.id}>
+                  Season {s.season_number}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button onClick={addSeason} disabled={isCreatingSeason}>
+          {isCreatingSeason ? "Creating..." : "Add Season"}
+        </Button>
+        <Button onClick={() => saveSeason(false)} disabled={isSavingSeason || !selectedSeasonId}>
+          {isSavingSeason ? "Saving..." : "Save Season"}
+        </Button>
+        <Button onClick={() => saveSeason(true)} disabled={isSavingSeason || !selectedSeasonId}>
+          {isSavingSeason ? "Finalizing..." : "Finalize Season"}
+        </Button>
+        <Button variant="destructive" onClick={deleteSeason} disabled={isDeletingSeason || !selectedSeasonId}>
+          {isDeletingSeason ? "Deleting..." : "Delete Season"}
+        </Button>
+      </div>
 
       <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-6">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600 table-auto">

@@ -1,6 +1,7 @@
 "use client"
 
 import { type LucideIcon } from "lucide-react"
+import { useSearchParams } from "next/navigation"
 
 import {
   Collapsible,
@@ -31,6 +32,15 @@ export function NavMain({
     }[]
   }[]
 }) {
+  const searchParams = useSearchParams()
+  const seasonId = searchParams.get("seasonId")
+
+  const withSeasonParam = (url: string) => {
+    if (!seasonId) return url
+    const separator = url.includes("?") ? "&" : "?"
+    return `${url}${separator}seasonId=${encodeURIComponent(seasonId)}`
+  }
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Menu</SidebarGroupLabel>
@@ -43,7 +53,7 @@ export function NavMain({
           >
             <SidebarMenuItem>
               <SidebarMenuButton tooltip={item.title} asChild>
-                <a href={item.url}>
+                <a href={withSeasonParam(item.url)}>
                   {item.icon && <item.icon />}
                   <span>{item.title}</span>
                 </a>
@@ -53,7 +63,7 @@ export function NavMain({
                   {item.items?.map((subItem) => (
                     <SidebarMenuSubItem key={subItem.title}>
                       <SidebarMenuSubButton asChild>
-                        <a href={subItem.url}>
+                        <a href={withSeasonParam(subItem.url)}>
                           <span>{subItem.title}</span>
                         </a>
                       </SidebarMenuSubButton>

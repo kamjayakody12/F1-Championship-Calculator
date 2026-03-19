@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminSupabase } from "@/utils/supabase/admin";
+import { apiCache } from "@/lib/cache";
+import { finalizeSeasonIfComplete, getSeasonTeamForDriver } from "@/lib/season-lifecycle";
 
 /**
  * Point mappings for different event types
@@ -58,8 +60,18 @@ export async function PUT(request: Request) {
     }
 
     // Parse request body
-    const { trackType, results } = await request.json();
-    console.log("PUT /api/results/update payload:", { track, trackType, results });
+    const { trackType, results, seasonId } = await request.json();
+    // Resolve season_id from payload or selected track relationship.
+    let resolvedSeasonId: string | null = seasonId || null;
+    if (!resolvedSeasonId) {
+        const { data: selectedTrackRow } = await adminSupabase
+            .from("selected_tracks")
+            .select("season_id")
+            .eq("id", track)
+            .maybeSingle();
+        resolvedSeasonId = selectedTrackRow?.season_id || null;
+    }
+    console.log("PUT /api/results/update payload:", { track, trackType, seasonId, results });
 
     const eventType = trackType || 'Race';
     console.log("Event type:", eventType);
@@ -144,8 +156,8 @@ export async function PUT(request: Request) {
 
         console.log(`Reverted ${totalPoints} points from driver ${existingResult.driver}`);
 
-        // Also subtract from the driver's team if present
-        const teamIdToRevert: string | null = driverData?.team ?? null;
+        // Revert constructor points from the team recorded on this historical result.
+        const teamIdToRevert: string | null = (existingResult as any).team_id ?? (driverData?.team ?? null);
         if (teamIdToRevert) {
             const { data: teamData, error: teamFetchError } = await adminSupabase
                 .from("teams")
@@ -188,7 +200,9 @@ export async function PUT(request: Request) {
             console.error("Error fetching driver team:", driverTeamError);
             return NextResponse.json({ error: driverTeamError.message }, { status: 500 });
         }
-        const teamId = driverTeamData?.team ?? null;
+        const teamId = resolvedSeasonId
+            ? await getSeasonTeamForDriver(resolvedSeasonId, row.driverId)
+            : (driverTeamData?.team ?? null);
         const currentDriverPoints = driverTeamData?.points ?? 0;
         // If driver didn't finish the race, they get zero points
         if (!row.racefinished) {
@@ -196,8 +210,10 @@ export async function PUT(request: Request) {
             const { error: insertError } = await adminSupabase.from("results").insert([
                 {
                     track,
+                    season_id: resolvedSeasonId,
                     finishing_position: row.position,
                     driver: row.driverId,
+                    team_id: teamId,
                     pole: row.pole,
                     fastestlap: row.fastestLap,
                     racefinished: row.racefinished
@@ -233,8 +249,10 @@ export async function PUT(request: Request) {
         const { error: insertError } = await adminSupabase.from("results").insert([
             {
                 track,
+                season_id: resolvedSeasonId,
                 finishing_position: row.position,
                 driver: row.driverId,
+                team_id: teamId,
                 qualified_position: qData?.position ?? null,
                 pole: row.pole,
                 fastestlap: row.fastestLap,
@@ -277,6 +295,17 @@ export async function PUT(request: Request) {
                 console.error("Error updating team points:", teamUpdateError);
                 return NextResponse.json({ error: teamUpdateError.message }, { status: 500 });
             }
+        }
+    }
+
+    apiCache.delByPrefix('results:');
+    apiCache.del('drivers:list');
+    apiCache.del('teams:list');
+    if (resolvedSeasonId) {
+        try {
+            await finalizeSeasonIfComplete(resolvedSeasonId);
+        } catch (e) {
+            console.error("Failed to finalize season automatically after update:", e);
         }
     }
 

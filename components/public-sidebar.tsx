@@ -23,6 +23,7 @@ import {
 } from "lucide-react"
 
 import { NavMain } from "@/components/public-nav-main"
+import { PublicSeasonSelector } from "@/components/public-season-selector"
 import { TeamSwitcher } from "@/components/team-switcher"
 import {
   Sidebar,
@@ -69,12 +70,17 @@ const data = {
       title: "Constructor Standings",
       url: "/public-dash/constructor-standings",
       icon: Crown,
-    },   
+    },
+    {
+      title: "Constructor Stats",
+      url: "/public-dash/constructor-stats",
+      icon: ChartBar,
+    },
     {
       title: "Drivers",
       url: "/public-dash/driver",
       icon: IconUser,
-    },  
+    },
   ],
 
 }
@@ -98,6 +104,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
+        <PublicSeasonSelector />
         <NavMain items={data.navMain} />
       </SidebarContent>
       <SidebarRail />

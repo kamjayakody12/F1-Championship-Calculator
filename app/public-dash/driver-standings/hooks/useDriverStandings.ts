@@ -3,7 +3,7 @@ import { supabase } from "@/lib/db";
 import { DriverRow, RaceResult, DriverStatsData } from "./types";
 import { extractImageUrl, calculateResultPoints } from "./utils";
 
-export function useDriverStandings() {
+export function useDriverStandings(seasonId?: string) {
   const [drivers, setDrivers] = useState<DriverRow[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [rankingData, setRankingData] = useState<any[]>([]);
@@ -14,11 +14,11 @@ export function useDriverStandings() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [seasonId]);
 
   const fetchData = async () => {
     try {
-      const [
+      let [
         { data: driversData },
         { data: teamsData },
         { data: results },
@@ -29,16 +29,34 @@ export function useDriverStandings() {
       ] = await Promise.all([
         supabase.from("drivers").select("*"),
         supabase.from("teams").select("*"),
-        supabase.from("results").select("*"),
-        supabase.from("schedules").select("*"),
+        (seasonId
+          ? supabase.from("results").select("*").eq("season_id", seasonId)
+          : supabase.from("results").select("*")),
+        (seasonId
+          ? supabase.from("schedules").select("*").eq("season_id", seasonId)
+          : supabase.from("schedules").select("*")),
         supabase.from("tracks").select("*"),
-        supabase.from("selected_tracks").select("*, track(*)"),
+        (seasonId
+          ? supabase.from("selected_tracks").select("*, track(*)").eq("season_id", seasonId)
+          : supabase.from("selected_tracks").select("*, track(*)")),
         supabase
           .from("rules")
           .select("polegivespoint, fastestlapgivespoint")
           .eq("id", 1)
           .single(),
       ]);
+
+      // Fallback for legacy data: if season-scoped rows are empty, use unscoped datasets.
+      if (seasonId && (results?.length || 0) === 0 && (schedules?.length || 0) === 0 && (selectedTracks?.length || 0) === 0) {
+        const fallback = await Promise.all([
+          supabase.from("results").select("*"),
+          supabase.from("schedules").select("*"),
+          supabase.from("selected_tracks").select("*, track(*)"),
+        ]);
+        results = fallback[0].data || [];
+        schedules = fallback[1].data || [];
+        selectedTracks = fallback[2].data || [];
+      }
 
       if (
         !driversData ||
@@ -102,7 +120,7 @@ export function useDriverStandings() {
       setRankingData(rankingEvolution);
 
       // Set driver standings
-      const enrichedDrivers = enrichDriverData(driversData, teamMap);
+      const enrichedDrivers = enrichDriverData(driversData, teamMap, raceResults);
       setDrivers(enrichedDrivers);
 
       setLoading(false);
@@ -135,7 +153,8 @@ function processRaceResults(
 ): RaceResult[] {
   return results.map((result: any) => {
     const driver = driverMap.get(result.driver);
-    const team = teamMap.get(driver?.team || "");
+    const resolvedTeamId = result.team_id || driver?.team || "";
+    const team = teamMap.get(resolvedTeamId);
 
     // result.track is a selected_track.id, so match directly with schedule.track
     const schedule = schedules.find((s: any) => s.track === result.track);
@@ -155,7 +174,7 @@ function processRaceResults(
       position: result.finishing_position ?? result.position,
       driver: result.driver,
       driverName: driver?.name || "Unknown",
-      teamId: driver?.team || "",
+      teamId: resolvedTeamId,
       teamName: team?.name || "Unknown",
       points,
       pole: result.pole || false,
@@ -352,15 +371,22 @@ function calculateChartData(
 
 function enrichDriverData(
   driversData: any[],
-  teamMap: Map<string, any>
+  teamMap: Map<string, any>,
+  raceResults: RaceResult[]
 ): DriverRow[] {
+  const pointsByDriver = new Map<string, number>();
+  raceResults.forEach((r) => {
+    pointsByDriver.set(r.driver, (pointsByDriver.get(r.driver) || 0) + (r.points || 0));
+  });
+
   return driversData
     .map((d: any) => {
-      const team = teamMap.get(d.team);
+      const latestTeamIdFromResults = [...raceResults].reverse().find((r) => r.driver === d.id)?.teamId;
+      const team = teamMap.get(latestTeamIdFromResults || d.team);
       return {
         id: d.id,
         name: d.name,
-        points: d.points || 0,
+        points: pointsByDriver.get(d.id) || 0,
         team: d.team,
         teamName: team?.name || "Unknown",
         teamLogo: extractImageUrl(team?.logo || ""),

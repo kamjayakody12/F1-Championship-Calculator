@@ -48,6 +48,8 @@ const sprintPointsMapping = [8, 7, 6, 5, 4, 3, 2, 1];
 
 export default function AdminDashboardPage() {
   const [drivers, setDrivers] = useState<any[]>([]);
+  const [seasons, setSeasons] = useState<any[]>([]);
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
   const [tracks, setTracks] = useState<{ id: string; trackId: string; name: string; type: string }[]>([]);
   const [selectedTrackId, setSelectedTrackId] = useState<string>("");
   const [selectedTrack, setSelectedTrack] = useState<string>("");
@@ -65,7 +67,16 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     fetch("/api/drivers").then((r) => r.json()).then(setDrivers);
-    fetch("/api/selected-tracks")
+    fetch("/api/seasons")
+      .then((r) => r.json())
+      .then((arr: any[]) => {
+        setSeasons(arr || []);
+        if (!selectedSeasonId && arr?.[0]?.id) setSelectedSeasonId(arr[0].id);
+      });
+  }, []);
+
+  useEffect(() => {
+    fetch(`/api/selected-tracks${selectedSeasonId ? `?seasonId=${encodeURIComponent(selectedSeasonId)}` : ""}`)
       .then((r) => r.json())
       .then((arr: { id: string; track: { id: string; name: string }; type: string }[]) =>
         setTracks(arr.map((s) => ({
@@ -75,7 +86,7 @@ export default function AdminDashboardPage() {
           type: s.type
         })))
       );
-  }, []);
+  }, [selectedSeasonId]);
 
   useEffect(() => {
     fetch("/api/rules")
@@ -281,6 +292,7 @@ export default function AdminDashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           track: selectedTrackId, // Use selected_tracks.id
+          seasonId: selectedSeasonId,
           trackType: selectedTrackType,
           results: resultsToSend
         }),
@@ -318,6 +330,7 @@ export default function AdminDashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           track: selectedTrackId,
+          seasonId: selectedSeasonId,
           qualifyingResults: qualifyingToSend
         }),
       });
@@ -371,6 +384,22 @@ export default function AdminDashboardPage() {
       </h1>
 
       <div className="mb-6 max-w-sm">
+        <label className="block mb-2 font-medium text-gray-700 dark:text-gray-300">
+          Select Season
+        </label>
+        <Select value={selectedSeasonId} onValueChange={setSelectedSeasonId}>
+          <SelectTrigger className="w-full mb-4">
+            <SelectValue placeholder="-- Select a Season --" />
+          </SelectTrigger>
+          <SelectContent>
+            {seasons.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                Season {s.season_number}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <label className="block mb-2 font-medium text-gray-700 dark:text-gray-300">
           Select Track
         </label>

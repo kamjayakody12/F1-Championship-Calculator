@@ -1,5 +1,5 @@
-import { ChartConfig } from '@/components/ui/chart';
-import { ChartDataPoint, Track } from '../hooks/types';
+import { ChartConfig } from "@/components/ui/chart";
+import { ChartDataPoint, Track } from "../hooks/types";
 
 interface ProgressionTooltipProps {
   active?: boolean;
@@ -11,11 +11,20 @@ interface ProgressionTooltipProps {
   hoveredTeam: string | null;
 }
 
+const brightenColor = (hslColor: string) => {
+  const hslMatch = hslColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+  if (!hslMatch) return hslColor;
+
+  const [, h, s, l] = hslMatch.map(Number);
+  return `hsl(${h}, ${Math.min(s + 10, 100)}%, ${Math.min(l + 18, 85)}%)`;
+};
+
 export const ProgressionTooltip = ({
   active,
   payload,
   label,
   chartData,
+  tracks,
   chartConfig,
   hoveredTeam,
 }: ProgressionTooltipProps) => {
@@ -23,24 +32,46 @@ export const ProgressionTooltip = ({
 
   const raceData = chartData.find((d) => d.race === label);
   const raceName = raceData ? raceData.race : label;
+  const trackName = String(raceName || "").split(" (")[0];
+  const track = tracks.find((t) => t.name === trackName);
 
-  const entries = hoveredTeam
-    ? payload.filter((p: any) => p.dataKey === hoveredTeam)
-    : payload.filter((p: any) => typeof p.value === 'number' && p.value > 0);
+  const numericEntries = payload.filter(
+    (entry: any) => typeof entry.value === "number" && Number.isFinite(entry.value)
+  );
+  const entries = (hoveredTeam
+    ? numericEntries.filter((entry: any) => entry.dataKey === hoveredTeam)
+    : numericEntries
+  ).sort((a: any, b: any) => b.value - a.value);
+
+  if (!entries.length) return null;
 
   return (
-    <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-      <p className="font-medium text-sm mb-2">{raceName}</p>
-      <p className="text-xs text-muted-foreground mb-2">Constructor championship points</p>
+    <div className="bg-background border border-border rounded-lg p-3 shadow-lg max-h-[400px] overflow-y-auto">
+      <div className="flex items-center gap-2 mb-2">
+        {track?.img && (
+          <div
+            className="w-6 h-4 flex items-center justify-center"
+            dangerouslySetInnerHTML={{ __html: track.img }}
+          />
+        )}
+        <p className="font-medium text-sm">{trackName || raceName}</p>
+      </div>
+      <p className="text-xs text-muted-foreground mb-2">Cumulative constructor points</p>
       <div className="space-y-1">
         {entries.map((entry: any, index: number) => {
-          const teamName = entry.dataKey;
-          const color = chartConfig[teamName]?.color || entry.color;
+          const teamName = entry.dataKey as string;
+          const color = (chartConfig[teamName]?.color as string) || entry.color || "hsl(0, 0%, 70%)";
+          const textColor = brightenColor(color);
+          const isHovered = hoveredTeam === teamName;
+
           return (
-            <div key={index} className="flex items-center gap-2 text-sm">
-              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-              <span className="font-medium">{teamName}</span>
-              <span className="ml-auto font-medium">{entry.value} pts</span>
+            <div
+              key={index}
+              className="flex items-center justify-between gap-2 text-sm"
+              style={{ fontWeight: isHovered ? "bold" : "normal" }}
+            >
+              <span style={{ color: textColor }}>{teamName}</span>
+              <span style={{ color: textColor }}>{entry.value} pts</span>
             </div>
           );
         })}

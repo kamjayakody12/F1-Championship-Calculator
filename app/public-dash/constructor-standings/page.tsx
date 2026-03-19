@@ -39,8 +39,10 @@ export default function ConstructorStandingsPage() {
   const [hoveredDistributionTeam, setHoveredDistributionTeam] = useState<string | null>(null);
   const [hoveredProgressionTeam, setHoveredProgressionTeam] = useState<string | null>(null);
   const [hoveredRankingTeam, setHoveredRankingTeam] = useState<string | null>(null);
+  const searchParams = useSearchParams();
 
   // Fetch data
+  const seasonId = searchParams.get("seasonId") || undefined;
   const {
     teams,
     chartData,
@@ -49,15 +51,27 @@ export default function ConstructorStandingsPage() {
     distributionData,
     tracks,
     loading,
-  } = useConstructorStandings();
+  } = useConstructorStandings(seasonId);
 
   // Deep-link support: /public-dash/constructor-standings?team=...
-  const searchParams = useSearchParams();
   useEffect(() => {
     const teamParam = searchParams.get("team");
     if (!teamParam) return;
-    setActiveTeam(teamParam === "all" ? "all" : teamParam);
-  }, [searchParams]);
+    if (teamParam === "all") {
+      setActiveTeam("all");
+      return;
+    }
+
+    // Accept both team name and team id in URL param.
+    const byId = teams.find((t) => t.id === teamParam);
+    if (byId) {
+      setActiveTeam(byId.name);
+      return;
+    }
+
+    const byName = teams.find((t) => t.name === teamParam);
+    setActiveTeam(byName ? byName.name : "all");
+  }, [searchParams, teams]);
 
   // Handle row click
   const handleTeamClick = (teamName: string) => {
@@ -152,6 +166,14 @@ export default function ConstructorStandingsPage() {
     dnfs: { label: "DNF/DSQ", color: "hsl(5, 100%, 60%)" },
   };
 
+  const progressionTeams = useMemo(
+    () =>
+      teams.filter((team) =>
+        chartData.some((row) => typeof row[team.name] === "number")
+      ),
+    [teams, chartData]
+  );
+
   // Loading state
   if (loading) {
     return (
@@ -205,126 +227,131 @@ export default function ConstructorStandingsPage() {
                   <ChartContainer
                     config={chartConfig}
                     className="w-full h-full overflow-visible"
+                    style={{ minHeight: 420 }}
                   >
                     <LineChart
-                    accessibilityLayer
-                    data={chartData}
-                    margin={{ left: 0, right: 20, top: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="race"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      minTickGap={5}
-                      height={36}
-                      interval={0}
-                      scale="point"
-                      padding={{ left: 10, right: 10 }}
-                      tick={(props) => {
-                        const { x, y, payload } = props as any;
-                        const raceData = chartData.find((d) => d.race === payload.value);
-                        if (raceData) {
-                          const trackName = (raceData.race as string).split(" (")[0];
-                          const track = tracks.find((t) => t.name === trackName);
-                          if (track?.img) {
-                            return (
-                              <g transform={`translate(${x},${y})`}>
-                                <foreignObject x={-12} y={4} width={24} height={16}>
-                                  <div
-                                    style={{
-                                      width: "100%",
-                                      height: "100%",
-                                      display: "flex",
-                                      justifyContent: "center",
-                                      alignItems: "center",
-                                    }}
-                                    dangerouslySetInnerHTML={{ __html: track.img }}
-                                  />
-                                </foreignObject>
-                              </g>
-                            );
+                      accessibilityLayer
+                      data={chartData}
+                      margin={{ left: 0, right: 20, top: 0, bottom: 0 }}
+                    >
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="race"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        minTickGap={5}
+                        height={36}
+                        interval={0}
+                        scale="point"
+                        padding={{ left: 10, right: 10 }}
+                        tick={(props) => {
+                          const { x, y, payload } = props as any;
+                          const raceData = chartData.find((d) => d.race === payload.value);
+                          if (raceData) {
+                            const trackName = (raceData.race as string).split(" (")[0];
+                            const track = tracks.find((t) => t.name === trackName);
+                            if (track?.img) {
+                              return (
+                                <g transform={`translate(${x},${y})`}>
+                                  <foreignObject x={-12} y={4} width={24} height={16}>
+                                    <div
+                                      style={{
+                                        width: "100%",
+                                        height: "100%",
+                                        display: "flex",
+                                        justifyContent: "center",
+                                        alignItems: "center",
+                                      }}
+                                      dangerouslySetInnerHTML={{ __html: track.img }}
+                                    />
+                                  </foreignObject>
+                                </g>
+                              );
+                            }
                           }
-                        }
-                        return (
-                          <g transform={`translate(${x},${y})`}>
-                            <text
-                              x={0}
-                              y={0}
-                              dy={12}
-                              textAnchor="middle"
-                              fill="#666"
-                              fontSize={12}
-                            >
-                              {raceData ? `Round ${raceData.raceIndex + 1}` : payload.value}
-                            </text>
-                          </g>
-                        );
-                      }}
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      tick={{ fontSize: 12 }}
-                      width={40}
-                      domain={[0, "dataMax + 10"]}
-                      allowDataOverflow={false}
-                    />
-                    <ChartTooltip
-                      cursor={true}
-                      content={(props) => (
-                        <ProgressionTooltip
-                          {...props}
-                          chartData={chartData}
-                          tracks={tracks}
-                          chartConfig={chartConfig}
-                          hoveredTeam={hoveredProgressionTeam}
-                        />
-                      )}
-                    />
-                    {teams.map((team) => {
-                      const isHovered = hoveredProgressionTeam === team.name;
-                      const isOtherHovered =
-                        hoveredProgressionTeam && hoveredProgressionTeam !== team.name;
-                      const lineColor = chartConfig[team.name]?.color || "hsl(0, 0%, 70%)";
+                          return (
+                            <g transform={`translate(${x},${y})`}>
+                              <text
+                                x={0}
+                                y={0}
+                                dy={12}
+                                textAnchor="middle"
+                                fill="#666"
+                                fontSize={12}
+                              >
+                                {raceData ? `Round ${raceData.raceIndex + 1}` : payload.value}
+                              </text>
+                            </g>
+                          );
+                        }}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        tick={{ fontSize: 12 }}
+                        width={40}
+                        domain={[0, "auto"]}
+                      />
+                      <ChartTooltip
+                        cursor={true}
+                        content={(props) => (
+                          <ProgressionTooltip
+                            {...props}
+                            chartData={chartData}
+                            tracks={tracks}
+                            chartConfig={chartConfig}
+                            hoveredTeam={hoveredProgressionTeam}
+                          />
+                        )}
+                      />
+                      {progressionTeams.map((team) => {
+                        const isHovered = hoveredProgressionTeam === team.name;
+                        const isOtherHovered =
+                          hoveredProgressionTeam && hoveredProgressionTeam !== team.name;
+                        const lineColor = chartConfig[team.name]?.color || "hsl(0, 0%, 70%)";
+                        const isVisible = activeTeam === "all" || activeTeam === team.name;
 
-                      return (
-                        <Line
-                          key={team.id}
-                          dataKey={team.name}
-                          type="monotone"
-                          stroke={lineColor}
-                          strokeWidth={isHovered ? 4 : activeTeam === team.name ? 3 : 2}
-                          strokeOpacity={isOtherHovered ? 0.15 : 1}
-                          connectNulls={true}
-                          dot={{
-                            r: 4,
-                            strokeWidth: 2,
-                            stroke: lineColor,
-                            fill: lineColor,
-                            onMouseEnter: () => setHoveredProgressionTeam(team.name),
-                            onMouseLeave: () => setHoveredProgressionTeam(null),
-                            style: { cursor: "pointer" },
-                          }}
-                          activeDot={{
-                            r: isHovered ? 8 : 4,
-                            strokeWidth: 2,
-                            stroke: lineColor,
-                            fill: lineColor,
-                            onMouseEnter: () => setHoveredProgressionTeam(team.name),
-                            onMouseLeave: () => setHoveredProgressionTeam(null),
-                          }}
-                          hide={activeTeam !== "all" && activeTeam !== team.name}
-                          onMouseEnter={() => setHoveredProgressionTeam(team.name)}
-                          onMouseLeave={() => setHoveredProgressionTeam(null)}
-                          style={{ cursor: "pointer" }}
-                        />
-                      );
-                    })}
-                  </LineChart>
-                </ChartContainer>
+                        return (
+                          <Line
+                            key={team.id}
+                            dataKey={team.name}
+                            type="monotone"
+                            stroke={isVisible ? lineColor : "transparent"}
+                            strokeWidth={isHovered ? 4 : activeTeam === team.name ? 3 : 2}
+                            strokeOpacity={isOtherHovered ? 0.15 : 1}
+                            connectNulls={true}
+                            dot={
+                              isVisible
+                                ? {
+                                    r: 4,
+                                    strokeWidth: 2,
+                                    stroke: lineColor,
+                                    fill: lineColor,
+                                    onMouseEnter: () => setHoveredProgressionTeam(team.name),
+                                    onMouseLeave: () => setHoveredProgressionTeam(null),
+                                    style: { cursor: "pointer" },
+                                  }
+                                : false
+                            }
+                            activeDot={{
+                              r: isHovered ? 8 : 4,
+                              strokeWidth: 2,
+                              stroke: lineColor,
+                              fill: lineColor,
+                              onMouseEnter: () => setHoveredProgressionTeam(team.name),
+                              onMouseLeave: () => setHoveredProgressionTeam(null),
+                            }}
+                            hide={!isVisible}
+                            onMouseEnter={() => setHoveredProgressionTeam(team.name)}
+                            onMouseLeave={() => setHoveredProgressionTeam(null)}
+                            style={{ cursor: "pointer" }}
+                          />
+                        );
+                      })}
+                    </LineChart>
+                  </ChartContainer>
                 )}
               </div>
             </CardContent>

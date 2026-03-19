@@ -38,6 +38,8 @@ export interface SelectedTrack {
 export default function ManageTracksPage() {
   const [selectedTracks, setSelectedTracks] = useState<SelectedTrack[]>([]);
   const [allTracks, setAllTracks] = useState<Track[]>([]);
+  const [seasons, setSeasons] = useState<any[]>([]);
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
 
   const [isLoadingInitialData, setIsLoadingInitialData] = useState(true);
   const [isAddingTrack, setIsAddingTrack] = useState(false);
@@ -50,9 +52,10 @@ export default function ManageTracksPage() {
     async function fetchData() {
       setIsLoadingInitialData(true);
       try {
-        const [tracksResponse, selectedTracksResponse] = await Promise.all([
+        const [tracksResponse, selectedTracksResponse, seasonsResponse] = await Promise.all([
           fetch("/api/tracks"),
-          fetch("/api/selected-tracks"),
+          fetch(`/api/selected-tracks${selectedSeasonId ? `?seasonId=${encodeURIComponent(selectedSeasonId)}` : ""}`),
+          fetch("/api/season-manager"),
         ]);
 
         if (tracksResponse.ok) {
@@ -68,6 +71,13 @@ export default function ManageTracksPage() {
         } else {
           toast.error("Failed to fetch current season tracks.");
         }
+        if (seasonsResponse.ok) {
+          const seasonsData = await seasonsResponse.json();
+          setSeasons(seasonsData || []);
+          if (!selectedSeasonId && Array.isArray(seasonsData) && seasonsData[0]?.id) {
+            setSelectedSeasonId(seasonsData[0].id);
+          }
+        }
       } catch (error: any) {
         toast.error("Error fetching data: " + error.message);
       } finally {
@@ -75,7 +85,7 @@ export default function ManageTracksPage() {
       }
     }
     fetchData();
-  }, []);
+  }, [selectedSeasonId]);
   console.log('isLoadingInitialData', isLoadingInitialData);
   const availableTracks = allTracks;
 
@@ -87,6 +97,16 @@ export default function ManageTracksPage() {
       return;
     }
 
+    if (!selectedSeasonId) {
+      toast.error("Please create/select a season first from the Schedule tab.");
+      return;
+    }
+    const selectedSeason = seasons.find((s: any) => s.id === selectedSeasonId);
+    if (selectedSeason?.is_finalized) {
+      toast.error("This season is finalized. Create a new season in Schedule tab.");
+      return;
+    }
+
     setIsAddingTrack(true);
     try {
       const response = await fetch("/api/selected-tracks", {
@@ -95,6 +115,7 @@ export default function ManageTracksPage() {
         body: JSON.stringify({
           trackId: selectedTrackId,
           type: trackType,
+          seasonId: selectedSeasonId,
         }),
       });
 
@@ -114,7 +135,8 @@ export default function ManageTracksPage() {
       setTrackType(TrackTypeEnum.Race);
       setIsAddTrackDialogOpen(false); // Close the main dialog
 
-      const data = await fetch("/api/selected-tracks").then((r) => r.json());
+      await response.json();
+      const data = await fetch(`/api/selected-tracks?seasonId=${encodeURIComponent(selectedSeasonId)}`).then((r) => r.json());
       setSelectedTracks(data);
 
       toast.success("Track added successfully!");
@@ -148,7 +170,7 @@ export default function ManageTracksPage() {
         return;
       }
 
-      const data = await fetch("/api/selected-tracks").then((r) => r.json());
+      const data = await fetch(`/api/selected-tracks?seasonId=${encodeURIComponent(selectedSeasonId)}`).then((r) => r.json());
       setSelectedTracks(data);
 
       toast.success("Track type updated successfully!");
@@ -162,7 +184,7 @@ export default function ManageTracksPage() {
       const response = await fetch("/api/selected-tracks", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackId: trackIdToDelete }),
+        body: JSON.stringify({ trackId: trackIdToDelete, seasonId: selectedSeasonId }),
       });
 
       if (!response.ok) {
@@ -177,7 +199,7 @@ export default function ManageTracksPage() {
         return;
       }
 
-      const data = await fetch("/api/selected-tracks").then((r) => r.json());
+      const data = await fetch(`/api/selected-tracks?seasonId=${encodeURIComponent(selectedSeasonId)}`).then((r) => r.json());
       setSelectedTracks(data);
 
       toast.success("Track removed successfully!");
@@ -192,6 +214,20 @@ export default function ManageTracksPage() {
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
           Manage Season Tracks
         </h1>
+        <div className="w-64">
+          <Select value={selectedSeasonId} onValueChange={setSelectedSeasonId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select season" />
+            </SelectTrigger>
+            <SelectContent>
+              {seasons.map((s: any) => (
+                <SelectItem key={s.id} value={s.id}>
+                  Season {s.season_number}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         <Dialog onOpenChange={setIsAddTrackDialogOpen} open={isAddTrackDialogOpen}>
           <DialogTrigger>
@@ -204,6 +240,16 @@ export default function ManageTracksPage() {
                 Select a track and its type for the current season.
               </DialogDescription>
             </DialogHeader>
+            {seasons.find((s: any) => s.id === selectedSeasonId)?.is_finalized && (
+              <p className="text-sm text-muted-foreground">
+                Selected season is finalized. Create a new season from the Schedule tab.
+              </p>
+            )}
+            {!selectedSeasonId && (
+              <p className="text-sm text-muted-foreground">
+                No season selected. Create or select a season in the Schedule tab first.
+              </p>
+            )}
             <form onSubmit={addSelectedTrack} className="grid gap-4 py-4">
               {/* Track Selection */}
               <div className="grid grid-cols-4 items-center gap-4">
@@ -259,7 +305,10 @@ export default function ManageTracksPage() {
               </div>
 
               <DialogFooter>
-                <Button type="submit" disabled={isAddingTrack || isLoadingInitialData || !selectedTrackId}>
+                <Button
+                  type="submit"
+                  disabled={isAddingTrack || isLoadingInitialData || !selectedTrackId || !selectedSeasonId}
+                >
                   {isAddingTrack && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Add Track
                 </Button>
@@ -329,6 +378,7 @@ export default function ManageTracksPage() {
                     <Button
                       variant="destructive"
                       size="sm"
+                      disabled={!!seasons.find((s: any) => s.id === selectedSeasonId)?.is_finalized}
                       onClick={() => deleteSelectedTrack(selectedTrack.id)}
                     >
                       Remove

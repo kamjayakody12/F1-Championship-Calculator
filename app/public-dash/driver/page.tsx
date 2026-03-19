@@ -96,11 +96,13 @@ export default async function DriverTilesPage() {
     base,
     side,
     teamName,
+    embedded = false,
   }: {
     driver: any;
     base: string;
     side: "left" | "right";
     teamName: string;
+    embedded?: boolean;
   }) {
     const driverImg: string = driver?.image || "";
     // Corner fade (subtle, not a hard glow).
@@ -126,22 +128,32 @@ export default async function DriverTilesPage() {
     );
     const rbGlowColor = addAlphaToHsl(setHslLightness(base, 60), 1);
 
-    return (
-      <div
-        className="group relative overflow-hidden rounded-2xl shadow w-full driver-tile-beam-parent"
-        style={{
+    const containerStyles = embedded
+      ? {
+          background: undefined,
+          backgroundImage: `${gradient}, radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+          backgroundSize: "auto, 12px 12px",
+          backgroundPosition: "center, 0 0",
+          minHeight: 340,
+          border: undefined,
+          ["--driver-tile-glow" as any]: teamName === "RB" ? rbGlowColor : addAlphaToHsl(base, 0.95),
+          ["--driver-tile-glow-blur" as any]: teamName === "RB" ? "44px" : "30px",
+        }
+      : {
           background: `#070708`,
-          // Team glow + subtle dotted texture (to match the reference tile look)
           backgroundImage: `${gradient}, radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
           backgroundSize: "auto, 12px 12px",
           backgroundPosition: "center, 0 0",
           minHeight: 340,
           border: `1px solid ${addAlphaToHsl(baseTop, 0.45)}`,
-          // Used by hover-glow effect on the number and name.
-          ["--driver-tile-glow" as any]:
-            teamName === "RB" ? rbGlowColor : addAlphaToHsl(base, 0.95),
+          ["--driver-tile-glow" as any]: teamName === "RB" ? rbGlowColor : addAlphaToHsl(base, 0.95),
           ["--driver-tile-glow-blur" as any]: teamName === "RB" ? "44px" : "30px",
-        }}
+        };
+
+    return (
+      <div
+        className={`group relative overflow-hidden ${embedded ? "" : "rounded-2xl shadow"} w-full driver-tile-beam-parent ${side === "left" ? "driver-card-left" : "driver-card-right"}`}
+        style={containerStyles as any}
       >
         {/* Team-colored corner fade (different per side) */}
         {side === "left" ? (
@@ -162,7 +174,7 @@ export default async function DriverTilesPage() {
 
         {/* Driver number (background, behind driver image) */}
         <div
-          className="driver-number-beam pointer-events-none select-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-0 leading-none transition-transform duration-200 group-hover:scale-[1.10]"
+          className="driver-number-beam pointer-events-none select-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-0 leading-none transition-transform duration-200 group-hover:scale-[1.03]"
           style={{
             fontSize: 240,
             fontWeight: 900,
@@ -198,12 +210,13 @@ export default async function DriverTilesPage() {
           />
         ) : null}
 
-        {/* Bottom fade for driver cutout */}
         <div
-          className="pointer-events-none absolute left-0 right-0 bottom-0 h-20 z-[3]"
+          className="pointer-events-none absolute left-0 right-0 bottom-0 z-[3]"
           style={{
-            background:
-              "linear-gradient(to top, rgba(11,11,12,0.96) 0%, rgba(11,11,12,0.55) 35%, rgba(11,11,12,0) 100%)",
+            height: embedded ? 56 : 80,
+            background: embedded
+              ? "linear-gradient(to top, rgba(11,11,12,0.72) 0%, rgba(11,11,12,0.28) 45%, rgba(11,11,12,0) 100%)"
+              : "linear-gradient(to top, rgba(11,11,12,0.96) 0%, rgba(11,11,12,0.55) 35%, rgba(11,11,12,0) 100%)",
           }}
         />
 
@@ -258,22 +271,29 @@ export default async function DriverTilesPage() {
     teamLogoUrl,
     teamCarUrl,
     base,
+    embedded = false,
   }: {
     teamName: string;
     teamLogoUrl: string;
     teamCarUrl: string;
     base: string;
+    embedded?: boolean;
   }) {
     const special = isSpecialTeam(teamName);
     const baseTop = setHslLightness(base, 30);
 
     return (
       <div
-        className="relative overflow-hidden rounded-2xl shadow w-full flex flex-col items-center justify-start gap-3 driver-team-logo-beam-parent pt-6 pb-28"
+        className={`relative overflow-hidden ${embedded ? "" : "rounded-2xl shadow"} w-full flex flex-col items-center justify-start gap-3 driver-team-logo-beam-parent pt-6 pb-28`}
         style={{
           background: `#070708`,
+          backgroundImage: embedded
+            ? `radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`
+            : undefined,
+          backgroundSize: embedded ? "12px 12px" : undefined,
+          backgroundPosition: embedded ? "center, 0 0" : undefined,
           minHeight: 340,
-          border: `1px solid ${addAlphaToHsl(baseTop, 0.45)}`,
+          border: embedded ? undefined : `1px solid ${addAlphaToHsl(baseTop, 0.45)}`,
         }}
       >
         {teamLogoUrl ? (
@@ -329,53 +349,62 @@ export default async function DriverTilesPage() {
           return (
             <div
               key={`${t.teamName}-${t.drivers?.[0]?.id || "team"}`}
-              className="grid grid-cols-1 md:grid-cols-[0.85fr_1.3fr_0.85fr] gap-4 items-stretch"
+              className="team-row-beam-parent relative overflow-hidden rounded-2xl shadow border border-border bg-[#070708]"
+              style={{ minHeight: 340 }}
             >
-              {left ? (
-                <Link
-                  href={`/public-dash/driver-stats?driverId=${encodeURIComponent(left.id)}`}
-                  className="block"
-                >
+              <div className="grid grid-cols-1 md:grid-cols-[0.85fr_1.3fr_0.85fr] items-stretch">
+                {left ? (
                   <DriverCard
                     driver={left}
                     base={t.base}
                     side="left"
                     teamName={t.teamName}
+                    embedded
                   />
-                </Link>
-              ) : (
-                <EmptyDriverCard base={t.base} />
-              )}
+                ) : (
+                  <EmptyDriverCard base={t.base} />
+                )}
 
-              <div className="w-full">
-                <Link
-                  href={`/public-dash/driver-stats?driverId=${encodeURIComponent((left || right)?.id || "")}`}
-                  className="block"
-                >
-                  <TeamLogoCard
-                    teamName={t.teamName}
-                    teamLogoUrl={t.teamLogoUrl}
-                    teamCarUrl={t.teamCarUrl}
-                    base={t.base}
-                  />
-                </Link>
-              </div>
+                <TeamLogoCard
+                  teamName={t.teamName}
+                  teamLogoUrl={t.teamLogoUrl}
+                  teamCarUrl={t.teamCarUrl}
+                  base={t.base}
+                  embedded
+                />
 
-              {right ? (
-                <Link
-                  href={`/public-dash/driver-stats?driverId=${encodeURIComponent(right.id)}`}
-                  className="block"
-                >
+                {right ? (
                   <DriverCard
                     driver={right}
                     base={t.base}
                     side="right"
                     teamName={t.teamName}
+                    embedded
                   />
-                </Link>
-              ) : (
-                <EmptyDriverCard base={t.base} />
-              )}
+                ) : (
+                  <EmptyDriverCard base={t.base} />
+                )}
+              </div>
+
+              {/* Overlay hit areas for a single-tile interaction model */}
+              <Link
+                href={`/public-dash/driver-stats?driverId=${encodeURIComponent(left?.id || "")}`}
+                className="team-zone-left hidden md:block absolute inset-y-0 left-0 z-20"
+                style={{ width: "30%" }}
+                aria-label={`Open ${left?.name || "left driver"} stats`}
+              />
+              <Link
+                href={`/public-dash/constructor-stats?team=${encodeURIComponent(t.teamName)}`}
+                className="team-zone-middle hidden md:block absolute inset-y-0 z-20"
+                style={{ left: "30%", width: "40%" }}
+                aria-label={`Open ${t.teamName} constructor stats`}
+              />
+              <Link
+                href={`/public-dash/driver-stats?driverId=${encodeURIComponent(right?.id || "")}`}
+                className="team-zone-right hidden md:block absolute inset-y-0 right-0 z-20"
+                style={{ width: "30%" }}
+                aria-label={`Open ${right?.name || "right driver"} stats`}
+              />
             </div>
           );
         })}

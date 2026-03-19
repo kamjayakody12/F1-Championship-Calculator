@@ -22,6 +22,17 @@ import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
 import { apiCache, withCacheControlHeaders } from "@/lib/cache";
 
+async function resolveSeasonId(request?: Request, bodySeasonId?: string | null): Promise<string | null> {
+  if (bodySeasonId) return bodySeasonId;
+  if (request) {
+    const { searchParams } = new URL(request.url);
+    const q = searchParams.get("seasonId");
+    if (q) return q;
+  }
+  const { data } = await supabase.from("seasons").select("id, season_number").order("season_number", { ascending: false }).limit(1);
+  return data?.[0]?.id || null;
+}
+
 /**
  * GET /api/schedules
  * 
@@ -40,19 +51,22 @@ import { apiCache, withCacheControlHeaders } from "@/lib/cache";
  * Note: The 'track' field references selected_tracks, which includes
  * both the physical track and the event type (Race/Sprint)
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     console.log('GET /api/schedules - fetching data...');
+    const seasonId = await resolveSeasonId(request);
     
     // Check cache first
-    const cacheKey = 'schedules:list';
+    const cacheKey = `schedules:list:${seasonId || "all"}`;
     const cached = apiCache.get<any[]>(cacheKey);
     if (cached) return NextResponse.json(cached, withCacheControlHeaders());
     
     // Fetch all schedules from database
-    const { data: schedules, error } = await supabase
+    let query = supabase
       .from('schedules')
       .select('*');
+    if (seasonId) query = query.eq("season_id", seasonId);
+    const { data: schedules, error } = await query;
     
     if (error) {
       console.error('GET /api/schedules - Supabase error:', error);
@@ -96,16 +110,21 @@ export async function GET() {
  */
 export async function POST(request: Request) {
   try {
-    const { selectedTrack, date } = await request.json();
-    console.log('POST /api/schedules - received:', { selectedTrack, date });
+    const { selectedTrack, date, seasonId: bodySeasonId } = await request.json();
+    const seasonId = await resolveSeasonId(undefined, bodySeasonId || null);
+    console.log('POST /api/schedules - received:', { selectedTrack, date, seasonId });
     
-    // Upsert: Insert new or update existing schedule
-    // onConflict: 'track' means if this track already has a schedule, update it
-    const { data, error } = await supabase
-      .from('schedules')
-      .upsert([{ track: selectedTrack, date }], { onConflict: 'track' })
-      .select()
-      .single();
+    // Update if exists for this season + selected track, else insert
+    const { data: existing } = await supabase
+      .from("schedules")
+      .select("id")
+      .eq("track", selectedTrack)
+      .eq("season_id", seasonId)
+      .maybeSingle();
+
+    const { data, error } = existing?.id
+      ? await supabase.from("schedules").update({ date }).eq("id", existing.id).select().single()
+      : await supabase.from("schedules").insert([{ track: selectedTrack, date, season_id: seasonId }]).select().single();
     
     if (error) {
       console.error('Supabase error:', error);
@@ -115,7 +134,7 @@ export async function POST(request: Request) {
     console.log('POST /api/schedules - success:', data);
     
     // Invalidate cache so next GET fetches fresh data
-    apiCache.del('schedules:list');
+    apiCache.delByPrefix('schedules:list:');
     
     // Return the schedule with date formatted as YYYY-MM-DD
     return NextResponse.json({

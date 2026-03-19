@@ -109,16 +109,17 @@ export default function DriverStatsPage() {
 
   const searchParams = useSearchParams();
   const urlDriverId = useMemo(() => searchParams.get("driverId"), [searchParams]);
+  const urlSeasonId = useMemo(() => searchParams.get("seasonId"), [searchParams]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [urlSeasonId]);
 
   useEffect(() => {
     if (selectedDriver) {
       fetchDriverStats(selectedDriver);
     }
-  }, [selectedDriver]);
+  }, [selectedDriver, urlSeasonId]);
 
   // Listen for theme changes to re-render chart
   useEffect(() => {
@@ -150,13 +151,28 @@ export default function DriverStatsPage() {
       ] = await Promise.all([
         supabase.from('drivers').select('*'),
         supabase.from('teams').select('*'),
-        supabase.from('results').select('*'),
+        (urlSeasonId
+          ? supabase.from('results').select('*').eq('season_id', urlSeasonId)
+          : supabase.from('results').select('*')),
         supabase.from('tracks').select('*'),
-        supabase.from('selected_tracks').select('*, track(*)'),
+        (urlSeasonId
+          ? supabase.from('selected_tracks').select('*, track(*)').eq('season_id', urlSeasonId)
+          : supabase.from('selected_tracks').select('*, track(*)')),
         supabase.from('rules').select('polegivespoint, fastestlapgivespoint').eq('id', 1).single()
       ]);
 
-      if (!driversData || !teamsData || !results || !tracksData || !selectedTracks || !rules) {
+      let effectiveResults = results || [];
+      let effectiveSelectedTracks = selectedTracks || [];
+      if (urlSeasonId && effectiveResults.length === 0 && effectiveSelectedTracks.length === 0) {
+        const [fallbackResults, fallbackSelectedTracks] = await Promise.all([
+          supabase.from("results").select("*"),
+          supabase.from("selected_tracks").select("*, track(*)"),
+        ]);
+        effectiveResults = fallbackResults.data || [];
+        effectiveSelectedTracks = fallbackSelectedTracks.data || [];
+      }
+
+      if (!driversData || !teamsData || !tracksData || !rules) {
         throw new Error('Failed to fetch data');
       }
 
@@ -165,7 +181,7 @@ export default function DriverStatsPage() {
       const teamMap = new Map(teamsData.map((t: Record<string, unknown>) => [t.id as string, t]));
       
       // Create selected track map for event type lookup
-      const selectedTrackMap = new Map(selectedTracks.map((st: Record<string, unknown>) => [st.id as string, st]));
+      const selectedTrackMap = new Map(effectiveSelectedTracks.map((st: Record<string, unknown>) => [st.id as string, st]));
       const processedDrivers = driversData.map((d: Record<string, unknown>) => {
         const team = teamMap.get(d.team as string);
         return {
@@ -207,21 +223,36 @@ export default function DriverStatsPage() {
         { data: rules },
         { data: driverData }
       ] = await Promise.all([
-        supabase.from('results').select('*').eq('driver', driverId),
+        (urlSeasonId
+          ? supabase.from('results').select('*').eq('driver', driverId).eq('season_id', urlSeasonId)
+          : supabase.from('results').select('*').eq('driver', driverId)),
         supabase.from('teams').select('*'),
         supabase.from('tracks').select('*'),
-        supabase.from('selected_tracks').select('*, track(*)'),
+        (urlSeasonId
+          ? supabase.from('selected_tracks').select('*, track(*)').eq('season_id', urlSeasonId)
+          : supabase.from('selected_tracks').select('*, track(*)')),
         supabase.from('rules').select('polegivespoint, fastestlapgivespoint').eq('id', 1).single(),
         supabase.from('drivers').select('*, team(*)').eq('id', driverId).single()
       ]);
 
-      if (!results || !teamsData || !tracksData || !selectedTracks || !rules || !driverData) return;
+      let effectiveResults = results || [];
+      let effectiveSelectedTracks = selectedTracks || [];
+      if (urlSeasonId && effectiveResults.length === 0 && effectiveSelectedTracks.length === 0) {
+        const [fallbackResults, fallbackSelectedTracks] = await Promise.all([
+          supabase.from("results").select("*").eq("driver", driverId),
+          supabase.from("selected_tracks").select("*, track(*)"),
+        ]);
+        effectiveResults = fallbackResults.data || [];
+        effectiveSelectedTracks = fallbackSelectedTracks.data || [];
+      }
+
+      if (!teamsData || !tracksData || !rules || !driverData) return;
 
       const teamMap = new Map(teamsData.map((t: Record<string, unknown>) => [t.id as string, t]));
       const trackMap = new Map(tracksData.map((t: Record<string, unknown>) => [t.id as string, t.name as string]));
       
       // Create selected track map for event type lookup
-      const selectedTrackMap = new Map(selectedTracks.map((st: Record<string, unknown>) => [st.id as string, st]));
+      const selectedTrackMap = new Map(effectiveSelectedTracks.map((st: Record<string, unknown>) => [st.id as string, st]));
       
       // Team color mapping
       const teamColorMap: { [key: string]: string } = {
@@ -263,7 +294,7 @@ export default function DriverStatsPage() {
       const teamColors = getTeamColorVariations(teamName);
 
       // Process race results
-      const raceResults: RaceResult[] = results.map((result: Record<string, unknown>) => {
+      const raceResults: RaceResult[] = effectiveResults.map((result: Record<string, unknown>) => {
         const team = teamMap.get((result.team as string) || '');
         const trackName = trackMap.get(result.track as string) || 'Unknown';
         

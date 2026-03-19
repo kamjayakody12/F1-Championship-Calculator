@@ -89,8 +89,8 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   // Parse request body
-  const { track, qualifyingResults } = await request.json();
-  console.log("POST /api/qualifying payload:", { track, qualifyingResults });
+  const { track, qualifyingResults, seasonId } = await request.json();
+  console.log("POST /api/qualifying payload:", { track, seasonId, qualifyingResults });
 
   // STEP 1: Prevent duplicate qualifying results
   // Check if qualifying results already exist for this track
@@ -121,6 +121,7 @@ export async function POST(request: Request) {
     const { error: insertError } = await adminSupabase.from("qualifying").insert([
       {
         track,
+        season_id: seasonId || null,
         position: result.position,  // Qualifying position (1-based)
         driver: result.driverId
       },

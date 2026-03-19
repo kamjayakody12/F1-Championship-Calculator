@@ -151,7 +151,10 @@
 }
 
 .driver-team-logo-beam-parent:hover .driver-team-logo-beam {
-  animation: driver-team-logo-beam 3s ease-in-out infinite;
+  animation: none;
+  transform: translate(-10%, -10%) scale(1.04);
+  opacity: 1;
+  filter: drop-shadow(0 0 26px var(--driver-team-logo-glow, rgba(255, 255, 255, 0.5)));
 }
 
 .driver-tile-beam-parent:hover .driver-number-beam,
@@ -159,4 +162,40 @@
   filter: drop-shadow(
     0 0 var(--driver-tile-glow-blur, 30px) var(--driver-tile-glow, rgba(255, 255, 255, 0.5))
   );
+}
+
+/* Unified team-tile hover zones (desktop): beam only the relevant target */
+.team-row-beam-parent:has(.team-zone-left:hover) .driver-card-left .driver-number-beam {
+  transform: translate(-10%, -10%) scale(1.03);
+  filter: drop-shadow(
+    0 0 var(--driver-tile-glow-blur, 30px) var(--driver-tile-glow, rgba(255, 255, 255, 0.5))
+  );
+}
+
+.team-row-beam-parent:has(.team-zone-left:hover) .driver-card-left .driver-name-beam {
+  transform: scale(1.06);
+  filter: drop-shadow(
+    0 0 var(--driver-tile-glow-blur, 30px) var(--driver-tile-glow, rgba(255, 255, 255, 0.5))
+  );
+}
+
+.team-row-beam-parent:has(.team-zone-right:hover) .driver-card-right .driver-number-beam {
+  transform: translate(-10%, -10%) scale(1.03);
+  filter: drop-shadow(
+    0 0 var(--driver-tile-glow-blur, 30px) var(--driver-tile-glow, rgba(255, 255, 255, 0.5))
+  );
+}
+
+.team-row-beam-parent:has(.team-zone-right:hover) .driver-card-right .driver-name-beam {
+  transform: scale(1.06);
+  filter: drop-shadow(
+    0 0 var(--driver-tile-glow-blur, 30px) var(--driver-tile-glow, rgba(255, 255, 255, 0.5))
+  );
+}
+
+.team-row-beam-parent:has(.team-zone-middle:hover) .driver-team-logo-beam {
+  animation: none;
+  transform: scale(1.14);
+  opacity: 1;
+  filter: drop-shadow(0 0 26px var(--driver-team-logo-glow, rgba(255, 255, 255, 0.5)));
 }

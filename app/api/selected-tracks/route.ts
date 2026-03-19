@@ -31,6 +31,21 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
 import { apiCache, withCacheControlHeaders } from "@/lib/cache";
+import {
+  assertSeasonAllowsRaceListMutation,
+  getLatestSeason,
+} from "@/lib/season-lifecycle";
+
+async function resolveSeasonId(request?: Request, bodySeasonId?: string | null): Promise<string | null> {
+  if (bodySeasonId) return bodySeasonId;
+  if (request) {
+    const { searchParams } = new URL(request.url);
+    const q = searchParams.get("seasonId");
+    if (q) return q;
+  }
+  const latest = await getLatestSeason();
+  return latest?.id || null;
+}
 
 /**
  * GET /api/selected-tracks
@@ -54,15 +69,19 @@ import { apiCache, withCacheControlHeaders } from "@/lib/cache";
  * 
  * Cached for 60 seconds.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const seasonId = await resolveSeasonId(request);
   // Check cache first
-  const cached = apiCache.get<any[]>(`selected-tracks:list`);
+  const cacheKey = `selected-tracks:list:${seasonId || "all"}`;
+  const cached = apiCache.get<any[]>(cacheKey);
   if (cached) return NextResponse.json(cached, withCacheControlHeaders());
   
   // Fetch selected tracks with nested physical track data
-  const { data: sel, error } = await supabase
+  let query = supabase
     .from('selected_tracks')
-    .select('id, track, type, tracks(*)');  // Join with tracks table
+    .select('id, track, type, tracks(*)');
+  if (seasonId) query = query.eq("season_id", seasonId);
+  const { data: sel, error } = await query;  // Join with tracks table
     
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   
@@ -74,7 +93,7 @@ export async function GET() {
   }));
   
   // Cache and return
-  apiCache.set('selected-tracks:list', payload, 60_000);
+  apiCache.set(cacheKey, payload, 60_000);
   return NextResponse.json(payload, withCacheControlHeaders());
 }
 
@@ -103,7 +122,15 @@ export async function GET() {
  * }
  */
 export async function POST(request: Request) {
-  const { trackId, type } = await request.json();
+  const { trackId, type, seasonId: bodySeasonId } = await request.json();
+  if (!bodySeasonId) {
+    return NextResponse.json({ error: "seasonId is required. Create/select a season first." }, { status: 400 });
+  }
+  try {
+    await assertSeasonAllowsRaceListMutation(bodySeasonId);
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || "Unable to use selected season" }, { status: 400 });
+  }
   
   // Validation: Ensure the physical track exists
   const { data: trackObj, error: trackError } = await supabase
@@ -119,19 +146,20 @@ export async function POST(request: Request) {
   // Create new selected_track entry
   const { data: newSel, error } = await supabase
     .from('selected_tracks')
-    .insert([{ track: trackId, type }])
+    .insert([{ track: trackId, type, season_id: bodySeasonId }])
     .select('id, track, type, tracks(*)')
     .single();
     
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   
   // Invalidate cache
-  apiCache.del('selected-tracks:list');
+  apiCache.delByPrefix('selected-tracks:list:');
   
   return NextResponse.json({ 
     id: newSel.id,          // This ID is used in results, qualifying, schedules
     track: newSel.tracks,   // Physical track data
-    type: newSel.type       // Event type
+    type: newSel.type,      // Event type
+    seasonId: bodySeasonId,
   });
 }
 
@@ -176,7 +204,7 @@ export async function PUT(request: Request) {
   if (!updatedTrack) return NextResponse.json({ error: "Selected track not found" }, { status: 404 });
 
   // Invalidate cache
-  apiCache.del('selected-tracks:list');
+  apiCache.delByPrefix('selected-tracks:list:');
   
   return NextResponse.json({ 
     id: updatedTrack.id, 
@@ -205,23 +233,34 @@ export async function PUT(request: Request) {
  * { success: true }
  */
 export async function DELETE(request: Request) {
-  const { trackId } = await request.json();
+  const { trackId, seasonId } = await request.json();
   
   // Validate required field
   if (!trackId) {
     return NextResponse.json({ error: "trackId is required" }, { status: 400 });
   }
 
+  if (!seasonId) {
+    return NextResponse.json({ error: "seasonId is required" }, { status: 400 });
+  }
+
+  try {
+    await assertSeasonAllowsRaceListMutation(seasonId);
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || "Season is finalized" }, { status: 400 });
+  }
+
   // Delete the selected_track entry
   const { error } = await supabase
     .from('selected_tracks')
     .delete()
-    .eq('id', trackId);  // trackId is selected_track.id
+    .eq('id', trackId)
+    .eq('season_id', seasonId);  // trackId is selected_track.id
     
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   
   // Invalidate cache
-  apiCache.del('selected-tracks:list');
+  apiCache.delByPrefix('selected-tracks:list:');
   
   return NextResponse.json({ success: true });
 }

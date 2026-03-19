@@ -45,6 +45,8 @@ export default function DriverStandingsPage() {
   >(null);
 
   // Fetch data
+  const searchParams = useSearchParams();
+  const seasonId = searchParams.get("seasonId") || undefined;
   const {
     drivers,
     chartData,
@@ -53,10 +55,9 @@ export default function DriverStandingsPage() {
     distributionData,
     tracks,
     loading,
-  } = useDriverStandings();
+  } = useDriverStandings(seasonId);
 
   // Deep-link support: /public-dash/driver-standings?driver=...
-  const searchParams = useSearchParams();
   useEffect(() => {
     const driverParam = searchParams.get("driver");
     if (!driverParam) return;

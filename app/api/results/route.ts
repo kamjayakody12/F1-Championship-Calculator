@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
 import { adminSupabase } from "@/utils/supabase/admin";
 import { apiCache, withCacheControlHeaders } from "@/lib/cache";
+import { finalizeSeasonIfComplete, getSeasonTeamForDriver } from "@/lib/season-lifecycle";
 
 /**
  * Point mappings for different event types
@@ -79,8 +80,19 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   // Parse request body
-  const { track, trackType, results } = await request.json();
-  console.log("POST /api/results payload:", { track, trackType, results });
+  const { track, trackType, results, seasonId } = await request.json();
+  // Resolve season_id from payload or selected track relationship.
+  let resolvedSeasonId: string | null = seasonId || null;
+  if (!resolvedSeasonId) {
+    const { data: selectedTrackRow } = await adminSupabase
+      .from("selected_tracks")
+      .select("season_id")
+      .eq("id", track)
+      .maybeSingle();
+    resolvedSeasonId = selectedTrackRow?.season_id || null;
+  }
+
+  console.log("POST /api/results payload:", { track, trackType, seasonId, results });
 
   const eventType = trackType || 'Race';
   console.log("Event type:", eventType);
@@ -135,7 +147,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: driverTeamError.message }, { status: 500 });
     }
 
-    const teamId: string | null = driverTeamData?.team ?? null;
+    const teamId: string | null = resolvedSeasonId
+      ? await getSeasonTeamForDriver(resolvedSeasonId, row.driverId)
+      : (driverTeamData?.team ?? null);
     const currentDriverPoints: number = driverTeamData?.points ?? 0;
 
     // 3b. Fetch qualifying position (optional, for display purposes)
@@ -160,8 +174,10 @@ export async function POST(request: Request) {
       const { error: insertError } = await adminSupabase.from("results").insert([
         {
           track,
+          season_id: resolvedSeasonId,
           finishing_position: row.position,
           driver: row.driverId,
+          team_id: teamId,
           qualified_position: qualifyingPosition,
           pole: row.pole,
           fastestlap: row.fastestLap,
@@ -208,8 +224,10 @@ export async function POST(request: Request) {
     const { error: insertError } = await adminSupabase.from("results").insert([
       {
         track,
+        season_id: resolvedSeasonId,
         finishing_position: row.position,
         driver: row.driverId,
+        team_id: teamId,
         qualified_position: qualifyingPosition,
         pole: row.pole,
         fastestlap: row.fastestLap,
@@ -275,6 +293,13 @@ export async function POST(request: Request) {
   apiCache.delByPrefix('results:');  // All results caches
   apiCache.del('drivers:list');      // Driver standings
   apiCache.del('teams:list');        // Team standings
+  if (resolvedSeasonId) {
+    try {
+      await finalizeSeasonIfComplete(resolvedSeasonId);
+    } catch (e) {
+      console.error("Failed to finalize season automatically:", e);
+    }
+  }
 
   return NextResponse.json({ success: true });
 }
