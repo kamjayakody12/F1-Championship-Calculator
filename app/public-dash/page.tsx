@@ -1,16 +1,11 @@
 import Link from "next/link";
 import { supabase } from "@/lib/db";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { ArrowUp, ArrowDown } from "lucide-react";
 import { JSX } from "react";
+import { getTeamColorVariations } from "./constructor-standings/hooks/constants";
+import NextRaceTimer from "./NextRaceTimer";
+import SeasonConfetti from "./SeasonConfetti";
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -47,6 +42,19 @@ function extractImageUrl(htmlString: string): string {
   if (!htmlString) return '';
   const match = htmlString.match(/src="([^"]+)"/);
   return match ? match[1] : '';
+}
+
+function getImageSrc(raw: unknown): string {
+  if (!raw) return "";
+  const str = String(raw);
+  return extractImageUrl(str) || str;
+}
+
+function toAlphaHsl(hsl: string, alpha: number): string {
+  const match = hsl.match(/hsl\(\s*(\d+),\s*(\d+)%\s*,\s*(\d+)%\s*\)/);
+  if (!match) return hsl;
+  const [, h, s, l] = match;
+  return `hsla(${h}, ${s}%, ${l}%, ${alpha})`;
 }
 
 /**
@@ -277,30 +285,42 @@ function calculateStandingsEvolution(
 // MAIN PAGE COMPONENT
 // ============================================================================
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams?: { seasonId?: string };
+}) {
+  const seasonId = searchParams?.seasonId || "";
   // ========================================
   // Fetch all required data from database
   // ========================================
 
   const { data: drivers, error: driversError } = await supabase
     .from('drivers')
-    .select('*, teams(name, logo)');
+    .select('*, teams(name, logo, carImage)');
 
   const { data: teamsData, error: teamsError } = await supabase
     .from('teams')
     .select('*');
 
-  const { data: results } = await supabase
-    .from('results')
-    .select('*');
+  const { data: results } = await (seasonId
+    ? supabase.from("results").select("*").eq("season_id", seasonId)
+    : supabase.from("results").select("*"));
 
-  const { data: schedules } = await supabase
-    .from('schedules')
-    .select('*');
+  const { data: schedules } = await (seasonId
+    ? supabase.from("schedules").select("*").eq("season_id", seasonId)
+    : supabase.from("schedules").select("*"));
 
-  const { data: selectedTracks } = await supabase
-    .from('selected_tracks')
-    .select('*, track(*)');
+  const { data: selectedTracks } = await (seasonId
+    ? supabase.from("selected_tracks").select("*, track(*)").eq("season_id", seasonId)
+    : supabase.from("selected_tracks").select("*, track(*)"));
+
+  const { data: seasonEntries } = await (seasonId
+    ? supabase
+        .from("season_driver_entries")
+        .select("driver_id, team_id")
+        .eq("season_id", seasonId)
+    : Promise.resolve({ data: [] as any[] }));
 
   const { data: rules } = await supabase
     .from('rules')
@@ -308,10 +328,75 @@ export default async function HomePage() {
     .eq('id', 1)
     .single();
 
+  const { data: seasonRow } = await (seasonId
+    ? supabase
+        .from("seasons")
+        .select("id, season_number, is_finalized")
+        .eq("id", seasonId)
+        .maybeSingle()
+    : supabase
+        .from("seasons")
+        .select("id, season_number, is_finalized")
+        .order("season_number", { ascending: false })
+        .limit(1)
+        .maybeSingle());
+
   // Handle errors
   if (driversError || teamsError) {
     return <div className="p-8 text-center text-red-600">Error loading data</div>;
   }
+
+  // If `schedules` is empty, synthesize it from `selected_tracks` so we can:
+  // 1) derive the latest completed event
+  // 2) calculate evolution for the Evo column
+  const effectiveSchedules =
+    (schedules || []).length > 0
+      ? schedules
+      : (selectedTracks || []).map((st: any, idx: number) => ({
+          track: st.id, // `calculateStandingsEvolution` expects `schedule.track` to be a selected_track.id
+          date: `1970-01-${String(idx + 1).padStart(2, "0")}`,
+        }));
+
+  const seasonTeamByDriverId = new Map<string, string | null>(
+    ((seasonEntries as any[]) || []).map((e: any) => [String(e.driver_id), e.team_id || null])
+  );
+
+  const selectedTrackMap = new Map((selectedTracks || []).map((st: any) => [String(st.id), st]));
+  const driverPointsMap = new Map<string, number>();
+  const constructorPointsMap = new Map<string, number>();
+
+  for (const r of results || []) {
+    const driverId = String(r.driver || "");
+    if (!driverId) continue;
+    const st = selectedTrackMap.get(String(r.track));
+    const eventType = st?.type || "Race";
+    const points = calculateResultPoints(r, rules, eventType);
+    driverPointsMap.set(driverId, (driverPointsMap.get(driverId) || 0) + points);
+
+    const resolvedTeamId =
+      r.team_id ||
+      (seasonId ? seasonTeamByDriverId.get(driverId) : null) ||
+      (drivers || []).find((d: any) => String(d.id) === driverId)?.team ||
+      null;
+    if (resolvedTeamId) {
+      const key = String(resolvedTeamId);
+      constructorPointsMap.set(key, (constructorPointsMap.get(key) || 0) + points);
+    }
+  }
+
+  const participatingDriverIds = new Set((results || []).map((r: any) => String(r.driver)));
+  const participatingDrivers = (drivers || [])
+    .map((d: any) => {
+      const resolvedTeamId = seasonId
+        ? (seasonTeamByDriverId.get(String(d.id)) ?? null)
+        : (d.team || null);
+      return {
+        ...d,
+        team: resolvedTeamId,
+        points: driverPointsMap.get(String(d.id)) || 0,
+      };
+    })
+    .filter((d: any) => participatingDriverIds.has(String(d.id)) && !!d.team);
 
   // ========================================
   // Prepare teams data with driver relationships
@@ -319,11 +404,8 @@ export default async function HomePage() {
 
   const teams = (teamsData || [])
     .map((team: any) => {
-      const teamDrivers = (drivers || []).filter((driver: any) => driver.team === team.id);
-      const constructorPoints = teamDrivers.reduce(
-        (sum: number, driver: any) => sum + (driver.points || 0),
-        0
-      );
+      const teamDrivers = participatingDrivers.filter((driver: any) => driver.team === team.id);
+      const constructorPoints = constructorPointsMap.get(String(team.id)) || 0;
       return {
         ...team,
         constructorPoints,
@@ -338,9 +420,9 @@ export default async function HomePage() {
   // ========================================
 
   const driverEvolution = calculateStandingsEvolution(
-    drivers || [],
+    participatingDrivers || [],
     results || [],
-    schedules || [],
+    effectiveSchedules || [],
     selectedTracks || [],
     rules,
     false // isTeam = false
@@ -353,7 +435,7 @@ export default async function HomePage() {
   const teamEvolution = calculateStandingsEvolution(
     teams,
     results || [],
-    schedules || [],
+    effectiveSchedules || [],
     selectedTracks || [],
     rules,
     true // isTeam = true
@@ -363,7 +445,7 @@ export default async function HomePage() {
   // Sort current standings by points
   // ========================================
 
-  const sortedDrivers = [...(drivers || [])].sort((a, b) => {
+  const sortedDrivers = [...(participatingDrivers || [])].sort((a, b) => {
     // Primary sort: by points (descending)
     if ((b.points || 0) !== (a.points || 0)) {
       return (b.points || 0) - (a.points || 0);
@@ -381,82 +463,504 @@ export default async function HomePage() {
     return a.name.localeCompare(b.name);
   });
 
+  const isSeasonFinalized = !!seasonRow?.is_finalized;
+  const driverChampion = sortedDrivers[0] || null;
+  const constructorChampion = sortedTeams[0] || null;
+  const constructorChampionDrivers = constructorChampion
+    ? [...participatingDrivers]
+        .filter((d: any) => d.team === constructorChampion.id)
+        .sort((a: any, b: any) => (b.points || 0) - (a.points || 0))
+        .slice(0, 2)
+    : [];
+  const driverChampionTeamNameRaw = driverChampion?.teams?.name || "";
+  const driverChampionTeamName =
+    driverChampionTeamNameRaw === "Stake F1 Team" ? "Sauber" : driverChampionTeamNameRaw;
+  const driverChampionColors = getTeamColorVariations(driverChampionTeamName);
+  const constructorChampionNameRaw = constructorChampion?.name || "";
+  const constructorChampionName =
+    constructorChampionNameRaw === "Stake F1 Team" ? "Sauber" : constructorChampionNameRaw;
+  const constructorChampionColors = getTeamColorVariations(constructorChampionName);
+
+  // ========================================
+  // Last race podium (top 3 finishers)
+  // ========================================
+  const selectedTrackById = new Map((selectedTracks || []).map((st: any) => [st.id, st]));
+  const selectedTrackByPhysicalId = new Map<string, any>();
+  (selectedTracks || []).forEach((st: any) => {
+    const physicalId = st?.track?.id;
+    if (physicalId) selectedTrackByPhysicalId.set(String(physicalId), st);
+  });
+
+  const teamById = new Map((teamsData || []).map((t: any) => [String(t.id), t]));
+  const driverById = new Map((participatingDrivers || []).map((d: any) => [d.id, d]));
+
+  const nowMs = Date.now();
+  const schedulesDesc = [...(effectiveSchedules || [])].sort(
+    (a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+
+  let lastRaceWeekend: any | null = null;
+  let lastRaceResults: any[] = [];
+
+  const findWeekendWithResults = (preferredType: "Race" | "Any") => {
+  for (const sch of schedulesDesc) {
+      const schMs = new Date(sch.date).getTime();
+      if (!Number.isFinite(schMs)) continue;
+      if (schMs > nowMs) continue; // only consider events that have already started
+
+      const selectedTrack =
+        selectedTrackById.get(sch.track) || selectedTrackByPhysicalId.get(String(sch.track));
+      if (!selectedTrack?.id) continue;
+
+      const physicalTrackId = selectedTrack?.track?.id;
+
+      // `results.track` might match any of these ids depending on how it was stored.
+      const candidateTrackIds = Array.from(
+        new Set(
+          [String(sch.track), String(selectedTrack.id), physicalTrackId ? String(physicalTrackId) : ""].filter(Boolean)
+        )
+      );
+
+      const trackResults = (results || []).filter((r: any) => {
+        const rTrack = r.track == null ? "" : String(r.track);
+        const posRaw = r.finishing_position ?? r.position;
+        const hasPosition = posRaw !== null && posRaw !== undefined;
+        return candidateTrackIds.includes(rTrack) && hasPosition;
+      });
+
+      if (trackResults.length === 0) continue;
+
+      const eventType = selectedTrack.type || selectedTrack?.track?.type || "Race";
+      if (preferredType === "Race" && eventType !== "Race") continue;
+
+      lastRaceWeekend = selectedTrack;
+      lastRaceResults = trackResults;
+      return true;
+    }
+    return false;
+  };
+
+  // First try: latest completed Race.
+  findWeekendWithResults("Race");
+  // Fallback: latest completed event of any type (only if no Race exists yet).
+  if (!lastRaceWeekend) findWeekendWithResults("Any");
+
+  const podium = (() => {
+    if (!lastRaceWeekend) return [];
+
+    const finished = (lastRaceResults || [])
+      .map((r: any) => {
+        const posRaw = r.finishing_position ?? r.position;
+        const posNum = Number(posRaw);
+        return {
+          driverId: r.driver,
+          teamId:
+            r.team_id ||
+            (seasonId ? seasonTeamByDriverId.get(String(r.driver)) : null) ||
+            null,
+          position: Number.isFinite(posNum) ? posNum : Infinity,
+        };
+      })
+      .filter((x: any) => Number.isFinite(x.position) && x.position !== Infinity && x.position >= 1)
+      .sort((a: any, b: any) => a.position - b.position);
+
+    const top3: any[] = [];
+    const seen = new Set<string>();
+    for (const row of finished) {
+      if (!row.driverId) continue;
+      const key = String(row.driverId);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      top3.push(row);
+      if (top3.length >= 3) break;
+    }
+
+    return top3.map((row: any) => {
+      const driver = driverById.get(row.driverId);
+      const resolvedTeam = row.teamId ? teamById.get(String(row.teamId)) : null;
+      const teamNameRaw = resolvedTeam?.name || driver?.teams?.name || "";
+      const normalizedTeamName = teamNameRaw === "Stake F1 Team" ? "Sauber" : teamNameRaw;
+      const teamColors = getTeamColorVariations(normalizedTeamName);
+      const teamLogoUrl = extractImageUrl(resolvedTeam?.logo || driver?.teams?.logo || "");
+
+      // "DIL" / "BUD" style badge: first 3 letters of the driver's name.
+      const rawName = driver?.name || "";
+      const cleaned = String(rawName).replace(/[^A-Za-z]/g, "");
+      const driverCode = cleaned.toUpperCase().slice(0, 3);
+
+      return {
+        driverName: driver?.name || String(row.driverId),
+        driverImageUrl: getImageSrc(driver?.image ?? driver?.carImage ?? ""),
+        teamName: teamNameRaw,
+        teamLogoUrl,
+        driverCode,
+        teamColorPrimary: teamColors.wins,
+        teamColorSecondary: teamColors.podiums,
+      };
+    });
+  })();
+
+  // ========================================
+  // Next race + countdown target
+  // ========================================
+  const upcomingSchedules =
+    (schedules || []).length > 0
+      ? schedules
+      : (selectedTracks || []).map((st: any, idx: number) => ({
+          // Use selected_track id as key (same structure expected by our schedule lookups).
+          track: st.id,
+          date: new Date(nowMs + (idx + 1) * 7 * 24 * 60 * 60 * 1000).toISOString(),
+        }));
+
+  const nextRace = (() => {
+    const sorted = [...(upcomingSchedules || [])].sort(
+      (a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    for (const sch of sorted) {
+      const schMs = new Date(sch.date).getTime();
+      if (!Number.isFinite(schMs) || schMs <= nowMs) continue;
+
+      const st =
+        selectedTrackById.get(sch.track) ||
+        selectedTrackByPhysicalId.get(String(sch.track));
+      if (!st?.id) continue;
+
+      return {
+        targetMs: schMs,
+        trackName: st.track?.name || st.track?.trackName || "",
+        flagHtml: st.track?.img || null,
+      };
+    }
+
+    // If nothing is found, don't crash: return null timer.
+    return null;
+  })();
+
   // ========================================
   // Render the standings tables
   // ========================================
 
   return (
     <div className="p-3 sm:p-4 md:p-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+      {isSeasonFinalized ? <SeasonConfetti /> : null}
+      {isSeasonFinalized && driverChampion && constructorChampion ? (
+        <section className="mb-4 sm:mb-6">
+          <h2 className="text-2xl font-semibold mb-4">Season Champions</h2>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div
+              className="rounded-2xl border border-border p-4 relative overflow-hidden w-full"
+              style={{
+                borderColor: driverChampionColors.wins,
+                backgroundImage: `linear-gradient(to bottom right, ${toAlphaHsl(
+                  driverChampionColors.podiums,
+                  0.24
+                )} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                backgroundSize: "auto, 12px 12px",
+                backgroundPosition: "center, 0 0",
+              }}
+            >
+              <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Drivers Champion</div>
+              <div className="flex items-center gap-3">
+                {driverChampion?.image ? (
+                  <img
+                    src={getImageSrc(driverChampion.image)}
+                    alt={`${driverChampion.name} image`}
+                    className="w-28 h-28 object-contain"
+                  />
+                ) : null}
+                <div>
+                  <div className="text-xl font-bold">{driverChampion.name}</div>
+                  <div className="text-sm text-muted-foreground">{driverChampion.points || 0} pts</div>
+                </div>
+                {driverChampion?.teams?.carImage ? (
+                  <img
+                    src={getImageSrc(driverChampion.teams.carImage)}
+                    alt={`${driverChampion.name} car`}
+                    className="w-44 h-24 object-contain opacity-80"
+                    style={{
+                      WebkitMaskImage:
+                        "linear-gradient(to bottom, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0) 100%)",
+                      maskImage:
+                        "linear-gradient(to bottom, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0) 100%)",
+                    }}
+                  />
+                ) : null}
+              </div>
+            </div>
 
-        {/* ==================== DRIVER STANDINGS ==================== */}
-        <section>
-          <h2 className="text-2xl font-semibold mb-4">Driver Standings</h2>
-          <div className="bg-card rounded-2xl shadow border border-border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">POS.</TableHead>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">DRIVER</TableHead>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">POINTS</TableHead>
-                  <TableHead className="py-3 px-4 text-xs font-semibold text-muted-foreground">EVO.</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedDrivers.map((driver: any, idx: number) => {
-                  // Get evolution data for this driver
-                  const evolution = driverEvolution.get(driver.id) || {
-                    value: "—",
-                    color: "text-gray-400",
-                    icon: null
-                  };
+            <div
+              className="rounded-2xl border border-border p-4 relative overflow-hidden w-full"
+              style={{
+                borderColor: constructorChampionColors.wins,
+                backgroundImage: `linear-gradient(to bottom right, ${toAlphaHsl(
+                  constructorChampionColors.podiums,
+                  0.24
+                )} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                backgroundSize: "auto, 12px 12px",
+                backgroundPosition: "center, 0 0",
+              }}
+            >
+              <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Constructors Champion</div>
+              <div className="flex items-center gap-3 mb-3 relative z-[1]">
+                {constructorChampion?.logo ? (
+                  <img
+                    src={extractImageUrl(constructorChampion.logo)}
+                    alt={`${constructorChampion.name} logo`}
+                    className="w-16 h-16 object-contain"
+                  />
+                ) : null}
+                <div className="flex items-center gap-2">
+                  <div className="leading-tight">
+                    <div className="text-xl font-bold">{constructorChampion.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {constructorChampion.constructorPoints || 0} pts
+                    </div>
+                  </div>
+                  <div className="flex items-center -space-x-2">
+                    {constructorChampionDrivers.map((d: any) => (
+                      <img
+                        key={`champ-driver-inline-${d.id}`}
+                        src={getImageSrc(d.image)}
+                        alt={`${d.name} image`}
+                        className="w-28 h-28 object-contain bg-black/10 dark:bg-transparent"
+                        style={{
+                          WebkitMaskImage:
+                            "linear-gradient(to bottom, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 100%)",
+                          maskImage:
+                            "linear-gradient(to bottom, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 100%)",
+                        }}
+                        title={d.name}
+                      />
+                    ))}
+                  </div>
+                  {constructorChampion?.carImage ? (
+                    <img
+                      src={getImageSrc(constructorChampion.carImage)}
+                      alt={`${constructorChampion.name} car`}
+                      className="w-44 h-24 object-contain opacity-80"
+                      style={{
+                        WebkitMaskImage:
+                          "linear-gradient(to bottom, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0) 100%)",
+                        maskImage:
+                          "linear-gradient(to bottom, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0) 100%)",
+                      }}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+      {!isSeasonFinalized ? (
+        <div className="flex justify-end mb-4">
+          <NextRaceTimer
+            targetMs={nextRace?.targetMs ?? null}
+            trackName={nextRace?.trackName}
+            flagHtml={nextRace?.flagHtml}
+          />
+        </div>
+      ) : null}
+      <div className="space-y-4 sm:space-y-6">
+          {/* ==================== LAST RACE PODIUM ==================== */}
+          <section>
+            <h2 className="text-2xl font-semibold mb-4">Last Race Podium</h2>
+            <div>
+              <div className="p-4 sm:p-6 flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[0, 1, 2].map((i) => {
+                      const entry = podium[i];
+                      const rank = i + 1;
+                      const tileBorder = entry?.teamColorPrimary || "hsl(0, 0%, 50%)";
+                      const tileOverlay = entry?.teamColorSecondary
+                        ? toAlphaHsl(entry.teamColorSecondary, 0.25)
+                        : "rgba(0,0,0,0)";
 
-                  return (
-                    <TableRow
-                      key={driver.id}
-                      className="border-b border-border last:border-0 hover:bg-muted/30 transition"
-                    >
-                      {/* Position */}
-                      <TableCell className="py-3 px-4 font-semibold text-foreground">
-                        {idx + 1}
-                      </TableCell>
-
-                      {/* Driver name with team logo */}
-                      <TableCell className="py-3 px-4 flex items-center gap-3">
-                        {(() => {
-                          const isRB = driver.teams?.name === 'RB';
-                          const isStakeF1 = driver.teams?.name === 'Stake F1 Team';
-                          const logoSize = (isRB || isStakeF1) ? 'w-9 h-9' : 'w-7 h-7';
-                          const fallbackSize = (isRB || isStakeF1) ? 'w-9 h-9' : 'w-7 h-7';
-
-                          return extractImageUrl(driver.teams?.logo || '') ? (
+                      return (
+                  <div
+                          key={`podium-${rank}`}
+                    className="relative rounded-2xl border border-border overflow-hidden min-h-[160px] flex flex-col justify-between"
+                          style={{
+                            borderColor: tileBorder,
+                            backgroundImage: `linear-gradient(to bottom right, ${tileOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                            backgroundSize: "auto, 12px 12px",
+                            backgroundPosition: "center, 0 0",
+                          }}
+                        >
+                    <div className="relative flex-1 pt-4 px-5">
+                      {entry ? (
+                        <>
+                          {/* Driver photo */}
+                          {entry.driverImageUrl ? (
                             <img
-                              src={extractImageUrl(driver.teams.logo)}
-                              alt={`${driver.teams?.name || 'Team'} logo`}
-                              className={`${logoSize} object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1`}
+                              src={entry.driverImageUrl}
+                              alt={`${entry.driverName} photo`}
+                              className="w-24 h-24 object-contain bg-black/10 dark:bg-transparent"
+                              style={{
+                                WebkitMaskImage:
+                                  "radial-gradient(110% 90% at 50% 60%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 82%)",
+                                maskImage:
+                                  "radial-gradient(110% 90% at 50% 60%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 82%)",
+                              }}
                             />
                           ) : (
-                            <span className={`inline-block ${fallbackSize} bg-muted rounded-full flex-shrink-0`} />
-                          );
-                        })()}
-                        <span className="font-medium text-foreground">{driver.name}</span>
-                      </TableCell>
+                            <div className="w-24 h-24 bg-muted/40" />
+                          )}
 
-                      {/* Points */}
-                      <TableCell className="py-3 px-4 font-bold text-foreground">
-                        {driver.points || 0}
-                      </TableCell>
+                          {/* Team logo overlay (top-right) */}
+                          {entry.teamLogoUrl ? (
+                            <img
+                              src={entry.teamLogoUrl}
+                              alt={`${entry.teamName} logo`}
+                              className="absolute top-2 right-2 w-11 h-11 rounded-lg object-contain bg-black/10 dark:bg-transparent"
+                            />
+                          ) : null}
+                        </>
+                      ) : null}
+                    </div>
 
-                      {/* Evolution */}
-                      <TableCell className={`py-3 px-4 font-medium flex items-center gap-1 ${evolution.color}`}>
-                        {evolution.icon}
-                        {evolution.value}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                    {/* Bottom info bar */}
+                    <div
+                      className="relative pb-4 px-5"
+                      style={{
+                        background:
+                          "linear-gradient(to top, rgba(11,11,12,0.96) 0%, rgba(11,11,12,0.75) 35%, rgba(11,11,12,0.0) 100%)",
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                            {entry?.driverCode || "—"}
+                          </div>
+                        </div>
+
+                        <div className="text-base font-bold text-foreground tracking-wide">
+                          P{rank}
+                        </div>
+
+                        <div className="w-10 text-right text-[11px] font-semibold text-muted-foreground">
+                          {rank === 1 ? "Leader" : ""}
+                        </div>
+                      </div>
+                    </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="w-[110px] flex items-center justify-center">
+                  {lastRaceWeekend?.track?.img ? (
+                    <div
+                      className="rounded-xl bg-black/10 dark:bg-transparent border border-border w-full flex items-center justify-center"
+                      style={{ height: 92 }}
+                    >
+                      <div
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          display: "flex",
+                          justifyContent: "center",
+                          alignItems: "center",
+                          padding: 8,
+                        }}
+                        dangerouslySetInnerHTML={{
+                          __html: lastRaceWeekend.track.img,
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">No flag</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Intentionally no footer copy under the podium tiles. */}
+            </div>
+          </section>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
+          {/* ==================== DRIVER STANDINGS ==================== */}
+        <section>
+          <h2 className="text-2xl font-semibold mb-4">Driver Standings</h2>
+          <div className="bg-card rounded-2xl border border-border overflow-hidden">
+            <div className="px-4 py-3 grid grid-cols-[56px_1fr_96px_96px] gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide bg-muted/20">
+              <div>POS</div>
+              <div>DRIVER</div>
+              <div className="text-right">POINTS</div>
+              <div className="text-right">EVO.</div>
+            </div>
+
+            <div className="p-2 space-y-2">
+              {sortedDrivers.map((driver: any, idx: number) => {
+                const evolution = driverEvolution.get(driver.id) || {
+                  value: "—",
+                  color: "text-gray-400",
+                  icon: null,
+                };
+
+                const teamNameRaw = driver.teams?.name || "";
+                const normalizedTeamName =
+                  teamNameRaw === "Stake F1 Team" ? "Sauber" : teamNameRaw;
+                const teamColors = getTeamColorVariations(normalizedTeamName);
+                const borderColor = toAlphaHsl(teamColors.wins, 0.55);
+                const tileOverlay = toAlphaHsl(teamColors.podiums, 0.2);
+
+                const logoSrc = extractImageUrl(driver.teams?.logo || "");
+                const isRB = driver.teams?.name === "RB" || driver.teams?.name === "Stake F1 Team";
+                const logoSizeClass = isRB ? "w-9 h-9" : "w-8 h-8";
+
+                return (
+                  <div
+                    key={driver.id}
+                    className="px-4 py-3 rounded-xl border border-border bg-card/30 flex items-center gap-4 transition"
+                    style={{
+                      borderColor,
+                      backgroundImage: `linear-gradient(to bottom right, ${tileOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                      backgroundSize: "auto, 12px 12px",
+                      backgroundPosition: "center, 0 0",
+                    }}
+                  >
+                    <div className="w-14 text-sm font-semibold text-foreground text-center">
+                      {idx + 1}
+                    </div>
+
+                    <div className="flex-1 min-w-0 flex items-center gap-3">
+                      {logoSrc ? (
+                        <img
+                          src={logoSrc}
+                          alt={`${teamNameRaw} logo`}
+                          className={`${logoSizeClass} object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1`}
+                        />
+                      ) : (
+                        <div className={`${logoSizeClass} rounded-full bg-muted/40 flex-shrink-0`} />
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground truncate">
+                          {driver.name}
+                        </div>
+                        {teamNameRaw ? (
+                          <div className="text-xs text-muted-foreground/70 truncate">
+                            {teamNameRaw}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="w-28 text-right text-sm font-bold text-foreground">
+                      {driver.points || 0}
+                    </div>
+
+                    <div className={`w-28 text-right flex items-center justify-end gap-1 text-sm font-medium ${evolution.color}`}>
+                      {evolution.icon}
+                      {evolution.value}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
 
             {/* Link to full standings */}
             <div className="flex justify-center p-4">
@@ -475,71 +979,75 @@ export default async function HomePage() {
         {/* ==================== CONSTRUCTOR STANDINGS ==================== */}
         <section>
           <h2 className="text-2xl font-semibold mb-4">Constructor Standings</h2>
-          <div className="bg-card rounded-2xl shadow border border-border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="py-4 px-6 text-xs font-semibold text-muted-foreground">POS.</TableHead>
-                  <TableHead className="py-4 px-6 text-xs font-semibold text-muted-foreground">CONSTRUCTOR</TableHead>
-                  <TableHead className="py-4 px-6 text-xs font-semibold text-muted-foreground">POINTS</TableHead>
-                  <TableHead className="py-4 px-6 text-xs font-semibold text-muted-foreground">EVO.</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedTeams.map((team: any, idx: number) => {
-                  // Get evolution data for this team
-                  const evolution = teamEvolution.get(team.id) || {
-                    value: "—",
-                    color: "text-gray-400",
-                    icon: null
-                  };
+          <div className="bg-card rounded-2xl border border-border overflow-hidden">
+            <div className="px-4 py-3 grid grid-cols-[56px_1fr_96px_96px] gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide bg-muted/20">
+              <div>POS</div>
+              <div>CONSTRUCTOR</div>
+              <div className="text-right">POINTS</div>
+              <div className="text-right">EVO.</div>
+            </div>
 
-                  return (
-                    <TableRow
-                      key={team.id}
-                      className="border-b border-border last:border-0 hover:bg-muted/30 transition"
-                    >
-                      {/* Position */}
-                      <TableCell className="py-4 px-6 font-semibold text-foreground">
-                        {idx + 1}
-                      </TableCell>
+            <div className="p-2 space-y-2">
+              {sortedTeams.map((team: any, idx: number) => {
+                const evolution = teamEvolution.get(team.id) || {
+                  value: "—",
+                  color: "text-gray-400",
+                  icon: null,
+                };
 
-                      {/* Team name with logo */}
-                      <TableCell className="py-4 px-6 flex items-center gap-3">
-                        {(() => {
-                          const isRB = team.name === 'RB';
-                          const isStakeF1 = team.name === 'Stake F1 Team';
-                          const logoSize = (isRB || isStakeF1) ? 'w-9 h-9' : 'w-7 h-7';
-                          const fallbackSize = (isRB || isStakeF1) ? 'w-9 h-9' : 'w-7 h-7';
+                const normalizedTeamName =
+                  team.name === "Stake F1 Team" ? "Sauber" : team.name;
+                const teamColors = getTeamColorVariations(normalizedTeamName);
+                const borderColor = toAlphaHsl(teamColors.wins, 0.55);
+                const tileOverlay = toAlphaHsl(teamColors.podiums, 0.2);
 
-                          return extractImageUrl(team.logo || '') ? (
-                            <img
-                              src={extractImageUrl(team.logo)}
-                              alt={`${team.name} logo`}
-                              className={`${logoSize} object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1`}
-                            />
-                          ) : (
-                            <span className={`inline-block ${fallbackSize} bg-muted rounded-full flex-shrink-0`} />
-                          );
-                        })()}
-                        <span className="font-medium text-foreground">{team.name}</span>
-                      </TableCell>
+                const logoSrc = extractImageUrl(team.logo || "");
+                const logoSizeClass = team.name === "RB" || team.name === "Stake F1 Team" ? "w-9 h-9" : "w-8 h-8";
 
-                      {/* Constructor Points */}
-                      <TableCell className="py-4 px-6 font-bold text-foreground">
-                        {team.constructorPoints || 0}
-                      </TableCell>
+                return (
+                  <div
+                    key={team.id}
+                    className="px-4 py-3 rounded-xl border border-border bg-card/30 flex items-center gap-4 transition"
+                    style={{
+                      borderColor,
+                      backgroundImage: `linear-gradient(to bottom right, ${tileOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                      backgroundSize: "auto, 12px 12px",
+                      backgroundPosition: "center, 0 0",
+                    }}
+                  >
+                    <div className="w-14 text-sm font-semibold text-foreground text-center">
+                      {idx + 1}
+                    </div>
 
-                      {/* Evolution */}
-                      <TableCell className={`py-4 px-6 font-medium flex items-center gap-1 ${evolution.color}`}>
-                        {evolution.icon}
-                        {evolution.value}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                    <div className="flex-1 min-w-0 flex items-center gap-3">
+                      {logoSrc ? (
+                        <img
+                          src={logoSrc}
+                          alt={`${team.name} logo`}
+                          className={`${logoSizeClass} object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1`}
+                        />
+                      ) : (
+                        <div className={`${logoSizeClass} rounded-full bg-muted/40 flex-shrink-0`} />
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground truncate">
+                          {team.name}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="w-28 text-right text-sm font-bold text-foreground">
+                      {team.constructorPoints || 0}
+                    </div>
+
+                    <div className={`w-28 text-right flex items-center justify-end gap-1 text-sm font-medium ${evolution.color}`}>
+                      {evolution.icon}
+                      {evolution.value}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
 
             {/* Link to full standings */}
             <div className="flex justify-center p-4">
@@ -554,6 +1062,7 @@ export default async function HomePage() {
             </div>
           </div>
         </section>
+        </div>
 
       </div>
     </div>

@@ -44,6 +44,7 @@ export async function GET(request: Request) {
   // Extract track ID from query parameters
   const { searchParams } = new URL(request.url);
   const track = searchParams.get("track");
+  const seasonId = searchParams.get("seasonId");
 
   // Validate required parameter
   if (!track) {
@@ -51,11 +52,16 @@ export async function GET(request: Request) {
   }
 
   // Fetch qualifying results ordered by position
-  const { data: qualifying, error } = await adminSupabase
+  let qualifyingQuery = adminSupabase
     .from("qualifying")
     .select("*")
-    .eq("track", track)
-    .order("position", { ascending: true });  // P1, P2, P3, etc.
+    .eq("track", track);
+
+  if (seasonId) {
+    qualifyingQuery = qualifyingQuery.eq("season_id", seasonId);
+  }
+
+  const { data: qualifying, error } = await qualifyingQuery.order("position", { ascending: true });  // P1, P2, P3, etc.
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(qualifying);
@@ -94,10 +100,16 @@ export async function POST(request: Request) {
 
   // STEP 1: Prevent duplicate qualifying results
   // Check if qualifying results already exist for this track
-  const { data: existingQualifying, error: existingErr } = await adminSupabase
+  let existingQualifyingQuery = adminSupabase
     .from("qualifying")
     .select("id")
     .eq("track", track);
+
+  if (seasonId) {
+    existingQualifyingQuery = existingQualifyingQuery.eq("season_id", seasonId);
+  }
+
+  const { data: existingQualifying, error: existingErr } = await existingQualifyingQuery;
 
   if (existingErr) {
     console.error("Error checking existing qualifying:", existingErr);

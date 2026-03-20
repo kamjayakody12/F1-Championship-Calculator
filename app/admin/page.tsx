@@ -114,7 +114,11 @@ export default function AdminDashboardPage() {
     if (!selectedTrackId) return;
 
     // Load race results
-    fetch(`/api/results?track=${encodeURIComponent(selectedTrackId)}`)
+    fetch(
+      `/api/results?track=${encodeURIComponent(selectedTrackId)}${
+        selectedSeasonId ? `&seasonId=${encodeURIComponent(selectedSeasonId)}` : ""
+      }`
+    )
       .then((r) => r.json())
       .then((data: any[]) => {
         if (data.length) {
@@ -137,7 +141,11 @@ export default function AdminDashboardPage() {
       });
 
     // Load qualifying results
-    fetch(`/api/qualifying?track=${encodeURIComponent(selectedTrackId)}`)
+    fetch(
+      `/api/qualifying?track=${encodeURIComponent(selectedTrackId)}${
+        selectedSeasonId ? `&seasonId=${encodeURIComponent(selectedSeasonId)}` : ""
+      }`
+    )
       .then((r) => r.json())
       .then((data: any[]) => {
         if (data.length) {

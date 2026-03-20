@@ -34,6 +34,12 @@ export const ProgressionTooltip = ({
   const raceName = raceData ? raceData.race : label;
   const trackName = String(raceName || "").split(" (")[0];
   const track = tracks.find((t) => t.name === trackName);
+  const eventType = String(raceName || "").includes(" - ")
+    ? String(raceName)
+        .split(" - ")
+        .pop()
+        ?.replace(")", "")
+    : null;
 
   const numericEntries = payload.filter(
     (entry: any) => typeof entry.value === "number" && Number.isFinite(entry.value)
@@ -54,9 +60,12 @@ export const ProgressionTooltip = ({
             dangerouslySetInnerHTML={{ __html: track.img }}
           />
         )}
-        <p className="font-medium text-sm">{trackName || raceName}</p>
+        <p className="font-medium text-sm">
+          {trackName || raceName}
+          {eventType ? ` - ${eventType}` : null}
+        </p>
       </div>
-      <p className="text-xs text-muted-foreground mb-2">Cumulative constructor points</p>
+      <p className="text-xs text-muted-foreground mb-2">Constructor championship points</p>
       <div className="space-y-1">
         {entries.map((entry: any, index: number) => {
           const teamName = entry.dataKey as string;

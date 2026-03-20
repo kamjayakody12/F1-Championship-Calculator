@@ -36,22 +36,40 @@ async function snapshotSeasonDataset(seasonId: string) {
     adminSupabase.from("season_results").delete().eq("season_id", seasonId),
   ]);
 
+  // Preserve the team a driver was assigned to *within this season*.
+  // If the global drivers table has been updated for a future season, we must NOT override
+  // the historical season team mapping when snapshotting season_* tables.
+  const { data: seasonDriverEntries, error: seasonDriverEntriesError } = await adminSupabase
+    .from("season_driver_entries")
+    .select("driver_id, team_id")
+    .eq("season_id", seasonId);
+
+  if (seasonDriverEntriesError) {
+    throw new Error(seasonDriverEntriesError.message || "Failed to load season driver entries");
+  }
+
+  const seasonTeamByDriverId = new Map<string, string | null>(
+    (seasonDriverEntries || []).map((e: any) => [e.driver_id, e.team_id ?? null])
+  );
+
   const seasonTeams = (teams || []).map((t: any) => ({
     season_id: seasonId,
     team_id: t.id,
     name: t.name,
     logo: t.logo || null,
     car_image: t.carImage || null,
-    points: t.points ?? 0,
+    // New seasons should start at 0 points regardless of the global teams/drivers table.
+    points: 0,
   }));
   const seasonDrivers = (drivers || []).map((d: any) => ({
     season_id: seasonId,
     driver_id: d.id,
-    team_id: d.team || null,
+    team_id: seasonTeamByDriverId.get(d.id) ?? d.team ?? null,
     name: d.name,
     driver_number: d.driver_number || null,
     image: d.image || null,
-    points: d.points ?? 0,
+    // New seasons should start at 0 points regardless of the global teams/drivers table.
+    points: 0,
   }));
   const seasonSelectedTracks = (selectedTracks || []).map((st: any) => ({
     season_id: seasonId,

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import DataTable from '@/components/data-table';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/db';
 import { Result } from '@/models/Result';
@@ -67,6 +67,8 @@ interface QualifyingResult {
 }
 
 export default function ResultsPage() {
+  const searchParams = useSearchParams();
+  const seasonId = searchParams.get("seasonId") || "";
   const [selectedTrack, setSelectedTrack] = useState<string>('');
   const [tracks, setTracks] = useState<Track[]>([]);
   const [results, setResults] = useState<ExtendedResult[]>([]);
@@ -80,7 +82,9 @@ export default function ResultsPage() {
     const fetchTracks = async () => {
       try {
         setTracksLoading(true);
-        const response = await fetch('/api/selected-tracks');
+        const response = await fetch(
+          `/api/selected-tracks${seasonId ? `?seasonId=${encodeURIComponent(seasonId)}` : ""}`
+        );
         if (response.ok) {
           const tracksData = await response.json();
           console.log('Raw tracks data:', tracksData); // Debug log
@@ -134,7 +138,7 @@ export default function ResultsPage() {
     };
 
     fetchTracks();
-  }, []);
+  }, [seasonId]);
 
 
   // Fetch results when track is selected
@@ -147,7 +151,11 @@ export default function ResultsPage() {
 
       try {
         // Fetch race results
-        const raceResponse = await fetch(`/api/results/details?track=${selectedTrack}`);
+        const raceResponse = await fetch(
+          `/api/results/details?track=${selectedTrack}${
+            seasonId ? `&seasonId=${encodeURIComponent(seasonId)}` : ""
+          }`
+        );
         if (raceResponse.ok) {
           const raceData = await raceResponse.json();
           setResults(raceData);
@@ -157,7 +165,11 @@ export default function ResultsPage() {
         }
 
         // Fetch qualifying results
-        const qualifyingResponse = await fetch(`/api/qualifying?track=${selectedTrack}`);
+        const qualifyingResponse = await fetch(
+          `/api/qualifying?track=${selectedTrack}${
+            seasonId ? `&seasonId=${encodeURIComponent(seasonId)}` : ""
+          }`
+        );
         if (qualifyingResponse.ok) {
           const qualifyingData = await qualifyingResponse.json();
           setQualifyingResults(qualifyingData);
@@ -174,7 +186,7 @@ export default function ResultsPage() {
     };
 
     fetchResults();
-  }, [selectedTrack]);
+  }, [selectedTrack, seasonId]);
 
   const calculatePoints = (position: number, pole: boolean, fastestLap: boolean, type: 'Race' | 'Sprint'): number => {
     const racePoints = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
@@ -223,98 +235,6 @@ export default function ResultsPage() {
 
     return { light, dark };
   };
-  // Race results columns
-  const raceColumns = [
-    {
-      accessorKey: 'position',
-      header: 'POS',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <div className="font-mono font-bold text-lg">{row.original.position}</div>
-      )
-    },
-    {
-      accessorKey: 'driverDetails.driver_number',
-      header: 'NO',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <DriverNumberCell
-          driverNumber={row.original.driverDetails.driver_number}
-          teamColor={row.original.teamDetails?.color || '#282828'}
-        />
-      )
-    },
-    {
-      accessorKey: 'driverDetails.name',
-      header: 'DRIVER',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <div className="font-semibold">{row.original.driverDetails.name}</div>
-      )
-    },
-    {
-      accessorKey: 'teamDetails.name',
-      header: 'TEAM',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => {
-        const isRB = row.original.teamDetails?.name === 'RB';
-        const isStakeF1 = row.original.teamDetails?.name === 'Stake F1 Team';
-        const logoSize = (isRB || isStakeF1) ? 'w-8 h-8' : 'w-6 h-6';
-        const fallbackSize = (isRB || isStakeF1) ? 'w-8 h-8' : 'w-6 h-6';
-
-        return (
-          <div className="flex items-center gap-3">
-            {(() => {
-              const logoUrl = extractImageUrl(row.original.teamDetails?.logo || '');
-              return logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt={`${row.original.teamDetails?.name} logo`}
-                  className={`${logoSize} object-contain`}
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
-              ) : (
-                <div className={`${fallbackSize} flex items-center justify-center`}>
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                    {row.original.teamDetails?.name?.charAt(0) || '?'}
-                  </span>
-                </div>
-              );
-            })()}
-            <span className="text-sm font-medium">
-              {row.original.teamDetails?.name}
-            </span>
-          </div>
-        );
-      }
-    },
-    {
-      accessorKey: 'qualifyingPosition',
-      header: 'STARTING GRID',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => {
-        const qualifyingResult = qualifyingResults.find((q: QualifyingResult) => q.driver === row.original.driver);
-        return (
-          <div className="font-mono text-sm">
-            {qualifyingResult?.position || '-'}
-          </div>
-        );
-      }
-    },
-    {
-      accessorKey: 'points',
-      header: 'PTS',
-      cell: ({ row }: { row: { original: ExtendedResult } }) => (
-        <div className="font-mono font-bold text-lg">
-          {!row.original.racefinished ? 'DNF' : row.original.points}
-        </div>
-      )
-    }
-  ];
-
-
-  // Helper function to format time
-  const formatTime = (time: string) => {
-    return time.includes(':') ? time : `${time}s`;
-  };
-
   // Reusable driver number cell component
   const DriverNumberCell = ({ driverNumber, teamColor }: { driverNumber: number | string | null, teamColor: string }) => {
     const { light, dark } = getDriverNumberStyles(teamColor);
@@ -544,8 +464,66 @@ export default function ResultsPage() {
       ) : selectedTrack ? (
         <div className="w-full animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
           {results && results.length > 0 ? (
-            <div className="overflow-x-auto">
-              <DataTable columns={raceColumns} data={results} />
+            <div className="bg-card rounded-2xl border border-border overflow-hidden">
+              <div className="px-4 py-3 grid grid-cols-[56px_72px_1fr_1fr_88px_88px] gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide bg-muted/20">
+                <div>POS</div>
+                <div>NO</div>
+                <div>DRIVER</div>
+                <div>TEAM</div>
+                <div className="text-right">GRID</div>
+                <div className="text-right">PTS</div>
+              </div>
+              <div className="p-2 space-y-2">
+                {results.map((row: ExtendedResult) => {
+                  const teamName = row.teamDetails?.name || "Unknown";
+                  const teamColor = row.teamDetails?.color || "#282828";
+                  const logoUrl = extractImageUrl(row.teamDetails?.logo || "");
+                  const qualifyingResult = qualifyingResults.find((q: QualifyingResult) => q.driver === row.driver);
+
+                  return (
+                    <div
+                      key={row.id}
+                      className="px-4 py-3 rounded-xl border flex items-center gap-3"
+                      style={{
+                        borderColor: `${teamColor}DD`,
+                        backgroundImage: `linear-gradient(to bottom right, ${teamColor}44 0%, rgba(0,0,0,0) 58%), radial-gradient(${teamColor}22 1px, transparent 1px), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                        backgroundSize: "auto, 12px 12px",
+                        backgroundPosition: "center, 0 0",
+                        boxShadow: `inset 0 0 0 1px ${teamColor}55, 0 0 22px ${teamColor}33`,
+                      }}
+                    >
+                      <div className="w-14 text-sm font-semibold text-foreground text-center">{row.position}</div>
+                      <div className="w-[72px]">
+                        <DriverNumberCell
+                          driverNumber={row.driverDetails?.driver_number}
+                          teamColor={teamColor}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0 text-sm font-semibold text-foreground truncate">
+                        {row.driverDetails?.name}
+                      </div>
+                      <div className="flex-1 min-w-0 flex items-center gap-2">
+                        {logoUrl ? (
+                          <img
+                            src={logoUrl}
+                            alt={`${teamName} logo`}
+                            className="w-6 h-6 object-contain"
+                          />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-muted/40" />
+                        )}
+                        <span className="text-sm text-muted-foreground truncate">{teamName}</span>
+                      </div>
+                      <div className="w-20 text-right text-sm font-mono text-foreground">
+                        {qualifyingResult?.position || "-"}
+                      </div>
+                      <div className="w-20 text-right text-sm font-bold text-foreground">
+                        {row.racefinished ? row.points : "DNF"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">

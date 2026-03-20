@@ -46,26 +46,17 @@ export async function GET() {
   
   // Fetch from database
   const { data: teams, error: teamsError } = await supabase.from('teams').select('*');
-  const { data: drivers, error: driversError } = await supabase
-    .from('drivers')
-    .select('id, team');
 
-  if (teamsError || driversError) {
+  if (teamsError) {
     return NextResponse.json(
-      { error: teamsError?.message || driversError?.message || 'Failed to fetch teams' },
+      { error: teamsError?.message || 'Failed to fetch teams' },
       { status: 500 }
     );
   }
 
-  // Only keep teams that have at least one driver assigned
-  const teamsWithDrivers =
-    (teams || []).filter((team: any) =>
-      (drivers || []).some((driver: any) => driver.team === team.id)
-    );
-  
-  // Cache and return
-  apiCache.set(cacheKey, teamsWithDrivers, 60_000);
-  return NextResponse.json(teamsWithDrivers, withCacheControlHeaders());
+  // Return ALL teams (even if there are currently no drivers assigned).
+  apiCache.set(cacheKey, teams || [], 60_000);
+  return NextResponse.json(teams || [], withCacheControlHeaders());
 }
 
 /**

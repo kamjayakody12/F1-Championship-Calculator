@@ -20,6 +20,7 @@ export async function GET(request: Request) {
   // Extract track ID from query parameters
   const { searchParams } = new URL(request.url);
   const track = searchParams.get("track");
+  const seasonId = searchParams.get("seasonId");
 
   // Validate required parameter
   if (!track) {
@@ -56,13 +57,13 @@ export async function GET(request: Request) {
     }
 
     // Step 3: Check cache to avoid redundant database queries
-    const cacheKey = `results-details:track:${track}:${eventType}:v1`;
+    const cacheKey = `results-details:track:${track}:season:${seasonId || "none"}:${eventType}:v1`;
     const cached = apiCache.get<any[]>(cacheKey);
     if (cached) return NextResponse.json(cached, withCacheControlHeaders(undefined, CACHE_PRESETS.DYNAMIC));
 
     // Step 4: Fetch results with nested driver and team data using Supabase joins
     // This single query gets all the data we need in one go
-    const { data: results, error } = await supabase
+    let resultsQuery = supabase
       .from("results")
       .select(`
         *,
@@ -70,23 +71,27 @@ export async function GET(request: Request) {
           id,
           name,
           driver_number,
-          team,
-          teams!inner (
-            id,
-            name,
-            logo
-          )
+          team
         )
       `)
-      .eq("track", track)
-      .order("finishing_position", { ascending: true });
+      .eq("track", track);
+
+    if (seasonId) {
+      resultsQuery = resultsQuery.eq("season_id", seasonId);
+    }
+
+    const { data: results, error } = await resultsQuery.order("finishing_position", { ascending: true });
 
     if (error) {
       console.error("Error fetching results with details:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Step 5: Define team colors for UI display
+    // Step 5: Load teams and define colors for UI display
+    const { data: teams } = await supabase.from("teams").select("id, name, logo");
+    const teamById = new Map((teams || []).map((t: any) => [String(t.id), t]));
+
+    // Define team colors for UI display
     // These are dark mode friendly colors that work well in the interface
     const teamColorMap: { [key: string]: string } = {
       'Red Bull': '#002661',     // Dark blue
@@ -123,12 +128,21 @@ export async function GET(request: Request) {
       },
       
       // Team information with color for UI
-      teamDetails: {
-        id: result.drivers.teams.id,
-        name: result.drivers.teams.name,
-        logo: result.drivers.teams.logo,
-        color: teamColorMap[result.drivers.teams.name] || '#B6BABD' // Default gray if team not found
-      },
+      // Prefer historical result.team_id to preserve season-specific team assignments.
+      // Fall back to current driver team only for legacy rows.
+      ...(function() {
+        const resolvedTeamId = result.team_id || result.drivers.team;
+        const team = resolvedTeamId ? teamById.get(String(resolvedTeamId)) : null;
+        const teamName = team?.name || 'Unknown';
+        return {
+          teamDetails: {
+            id: team?.id || resolvedTeamId || '',
+            name: teamName,
+            logo: team?.logo || '',
+            color: teamColorMap[teamName] || '#B6BABD'
+          }
+        };
+      })(),
       
       // Display fields (placeholder data for now)
       time: result.racefinished ? (result.finishing_position === 1 ? '1:35:21.231' : '-') : 'DNF',

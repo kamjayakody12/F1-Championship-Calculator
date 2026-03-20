@@ -39,10 +39,22 @@ function setHslLightness(color: string, lightnessPercent: number): string {
   return `hsl(${h}, ${s}%, ${lightnessPercent}%)`;
 }
 
-export default async function DriverTilesPage() {
-  const { data: drivers } = await supabase
-    .from("drivers")
-    .select("*, teams(name, logo, carImage)");
+export default async function DriverTilesPage({
+  searchParams,
+}: {
+  searchParams?: { seasonId?: string };
+}) {
+  const seasonId = searchParams?.seasonId || "";
+  const [{ data: drivers }, { data: teamsData }, { data: seasonEntries }] = await Promise.all([
+    supabase.from("drivers").select("*"),
+    supabase.from("teams").select("id, name, logo, carImage"),
+    (seasonId
+      ? supabase
+          .from("season_driver_entries")
+          .select("driver_id, team_id")
+          .eq("season_id", seasonId)
+      : Promise.resolve({ data: [] as any[] })),
+  ]);
 
   if (!drivers) {
     return (
@@ -50,7 +62,31 @@ export default async function DriverTilesPage() {
     );
   }
 
-  const sortedDrivers = [...drivers].sort((a: any, b: any) => (b.points || 0) - (a.points || 0));
+  const teamById = new Map((teamsData || []).map((t: any) => [String(t.id), t]));
+  const seasonTeamByDriverId = new Map<string, string | null>(
+    ((seasonEntries as any[]) || []).map((e: any) => [String(e.driver_id), e.team_id || null])
+  );
+
+  const normalizedDrivers = (drivers || []).map((d: any) => {
+    const resolvedTeamId = seasonId
+      ? (seasonTeamByDriverId.get(String(d.id)) ?? null)
+      : (d.team || null);
+    const resolvedTeam = resolvedTeamId ? teamById.get(String(resolvedTeamId)) : null;
+    return {
+      ...d,
+      team: resolvedTeamId,
+      teams: resolvedTeam
+        ? {
+            name: resolvedTeam.name,
+            logo: resolvedTeam.logo,
+            carImage: resolvedTeam.carImage,
+          }
+        : null,
+    };
+  });
+
+  const teamAssignedDrivers = normalizedDrivers.filter((d: any) => !!d.team);
+  const sortedDrivers = [...teamAssignedDrivers].sort((a: any, b: any) => (b.points || 0) - (a.points || 0));
 
   // Group by team (expects drivers table to have a `team` FK)
   const teamMap = new Map<

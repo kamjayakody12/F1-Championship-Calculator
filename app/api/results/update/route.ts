@@ -77,10 +77,13 @@ export async function PUT(request: Request) {
     console.log("Event type:", eventType);
 
     // STEP 1: Fetch existing results that we need to revert
-    const { data: existingResults, error: fetchError } = await adminSupabase
-        .from("results")
-        .select("*")
-        .eq("track", track);
+    // IMPORTANT: scope by season_id (when available) so updating one season
+    // does not overwrite results from other seasons for the same track.
+    let existingResultsQuery = adminSupabase.from("results").select("*").eq("track", track);
+    if (resolvedSeasonId) {
+        existingResultsQuery = existingResultsQuery.eq("season_id", resolvedSeasonId);
+    }
+    const { data: existingResults, error: fetchError } = await existingResultsQuery;
 
     if (fetchError) {
         console.error("Error fetching existing results:", fetchError);
@@ -131,57 +134,122 @@ export async function PUT(request: Request) {
 
         console.log(`Reverting for driver ${existingResult.driver}: eventType=${existingEventType}, position=${priorPos}, basePoints=${basePoints}, bonusPoints=${bonusPoints}, totalPoints=${totalPoints}, racefinished=${existingResult.racefinished}`);
 
-        // Subtract these points from the driver
-        const { data: driverData, error: driverFetchError } = await adminSupabase
-            .from("drivers")
-            .select("points, team")
-            .eq("id", existingResult.driver)
-            .single();
+        // Subtract these points from the driver (season-scoped when possible).
+        let currentPoints = 0;
+        let driverTeamId: string | null = null;
 
-        if (driverFetchError) {
-            console.error("Error fetching driver points for revert:", driverFetchError);
-            return NextResponse.json({ error: driverFetchError.message }, { status: 500 });
-        }
+        if (resolvedSeasonId) {
+            const { data: seasonDriverData, error: driverFetchError } = await adminSupabase
+                .from("season_drivers")
+                .select("points, team_id")
+                .eq("season_id", resolvedSeasonId)
+                .eq("driver_id", existingResult.driver)
+                .single();
 
-        const currentPoints = driverData?.points || 0;
-        const { error: revertError } = await adminSupabase
-            .from("drivers")
-            .update({ points: Math.max(0, currentPoints - totalPoints) })
-            .eq("id", existingResult.driver);
+            if (driverFetchError) {
+                // If the row doesn't exist, keep 0 and still attempt to revert by using historical team_id.
+                currentPoints = 0;
+                driverTeamId = null;
+            } else {
+                currentPoints = seasonDriverData?.points ?? 0;
+                driverTeamId = seasonDriverData?.team_id ?? null;
+            }
 
-        if (revertError) {
-            console.error("Error reverting driver points:", revertError);
-            return NextResponse.json({ error: revertError.message }, { status: 500 });
+            const { error: revertError } = await adminSupabase
+                .from("season_drivers")
+                .update({ points: Math.max(0, currentPoints - totalPoints) })
+                .eq("season_id", resolvedSeasonId)
+                .eq("driver_id", existingResult.driver);
+
+            if (revertError) {
+                console.error("Error reverting season driver points:", revertError);
+                return NextResponse.json({ error: revertError.message }, { status: 500 });
+            }
+        } else {
+            const { data: driverData, error: driverFetchError } = await adminSupabase
+                .from("drivers")
+                .select("points, team")
+                .eq("id", existingResult.driver)
+                .single();
+
+            if (driverFetchError) {
+                console.error("Error fetching driver points for revert:", driverFetchError);
+                return NextResponse.json({ error: driverFetchError.message }, { status: 500 });
+            }
+
+            currentPoints = driverData?.points || 0;
+            driverTeamId = driverData?.team ?? null;
+
+            const { error: revertError } = await adminSupabase
+                .from("drivers")
+                .update({ points: Math.max(0, currentPoints - totalPoints) })
+                .eq("id", existingResult.driver);
+
+            if (revertError) {
+                console.error("Error reverting driver points:", revertError);
+                return NextResponse.json({ error: revertError.message }, { status: 500 });
+            }
         }
 
         console.log(`Reverted ${totalPoints} points from driver ${existingResult.driver}`);
 
         // Revert constructor points from the team recorded on this historical result.
-        const teamIdToRevert: string | null = (existingResult as any).team_id ?? (driverData?.team ?? null);
+        const teamIdToRevert: string | null =
+            (existingResult as any).team_id ?? driverTeamId ?? null;
+
         if (teamIdToRevert) {
-            const { data: teamData, error: teamFetchError } = await adminSupabase
-                .from("teams")
-                .select("points")
-                .eq("id", teamIdToRevert)
-                .single();
-            if (teamFetchError) {
-                console.error("Error fetching team points for revert:", teamFetchError);
-                return NextResponse.json({ error: teamFetchError.message }, { status: 500 });
-            }
-            const teamPts = teamData?.points ?? 0;
-            const { error: teamRevertError } = await adminSupabase
-                .from("teams")
-                .update({ points: Math.max(0, teamPts - totalPoints) })
-                .eq("id", teamIdToRevert);
-            if (teamRevertError) {
-                console.error("Error reverting team points:", teamRevertError);
-                return NextResponse.json({ error: teamRevertError.message }, { status: 500 });
+            if (resolvedSeasonId) {
+                const { data: seasonTeamData, error: teamFetchError } = await adminSupabase
+                    .from("season_teams")
+                    .select("points")
+                    .eq("season_id", resolvedSeasonId)
+                    .eq("team_id", teamIdToRevert)
+                    .single();
+
+                const teamPts = seasonTeamData?.points ?? 0;
+                const { error: teamRevertError } = await adminSupabase
+                    .from("season_teams")
+                    .update({ points: Math.max(0, teamPts - totalPoints) })
+                    .eq("season_id", resolvedSeasonId)
+                    .eq("team_id", teamIdToRevert);
+
+                if (teamRevertError) {
+                    console.error("Error reverting season team points:", teamRevertError);
+                    return NextResponse.json({ error: teamRevertError.message }, { status: 500 });
+                }
+
+                if (teamFetchError) {
+                    // row missing is effectively a no-op revert; ignore.
+                }
+            } else {
+                const { data: teamData, error: teamFetchError } = await adminSupabase
+                    .from("teams")
+                    .select("points")
+                    .eq("id", teamIdToRevert)
+                    .single();
+                if (teamFetchError) {
+                    console.error("Error fetching team points for revert:", teamFetchError);
+                    return NextResponse.json({ error: teamFetchError.message }, { status: 500 });
+                }
+                const teamPts = teamData?.points ?? 0;
+                const { error: teamRevertError } = await adminSupabase
+                    .from("teams")
+                    .update({ points: Math.max(0, teamPts - totalPoints) })
+                    .eq("id", teamIdToRevert);
+                if (teamRevertError) {
+                    console.error("Error reverting team points:", teamRevertError);
+                    return NextResponse.json({ error: teamRevertError.message }, { status: 500 });
+                }
             }
         }
     }
 
-    // Clear existing results for the track
-    const { error: deleteError } = await adminSupabase.from("results").delete().eq("track", track);
+    // Clear existing results for the track (and season, if season-scoped)
+    let deleteQuery = adminSupabase.from("results").delete().eq("track", track);
+    if (resolvedSeasonId) {
+        deleteQuery = deleteQuery.eq("season_id", resolvedSeasonId);
+    }
+    const { error: deleteError } = await deleteQuery;
     if (deleteError) {
         console.error("Error deleting old results:", deleteError);
         return NextResponse.json({ error: deleteError.message }, { status: 500 });
@@ -190,20 +258,32 @@ export async function PUT(request: Request) {
     // Now insert the new results and update running points
     for (const row of results) {
         if (!row.driverId) continue;
-        // Fetch driver's current team and points
-        const { data: driverTeamData, error: driverTeamError } = await adminSupabase
-            .from("drivers")
-            .select("team, points")
-            .eq("id", row.driverId)
-            .single();
-        if (driverTeamError) {
-            console.error("Error fetching driver team:", driverTeamError);
-            return NextResponse.json({ error: driverTeamError.message }, { status: 500 });
+        // Resolve team + current points for incremental updates (season-scoped when possible).
+        let teamId: string | null = null;
+        let currentDriverPoints = 0;
+
+        if (resolvedSeasonId) {
+            teamId = await getSeasonTeamForDriver(resolvedSeasonId, row.driverId);
+            const { data: seasonDriverData } = await adminSupabase
+                .from("season_drivers")
+                .select("points")
+                .eq("season_id", resolvedSeasonId)
+                .eq("driver_id", row.driverId)
+                .single();
+            currentDriverPoints = seasonDriverData?.points ?? 0;
+        } else {
+            const { data: driverTeamData, error: driverTeamError } = await adminSupabase
+                .from("drivers")
+                .select("team, points")
+                .eq("id", row.driverId)
+                .single();
+            if (driverTeamError) {
+                console.error("Error fetching driver team:", driverTeamError);
+                return NextResponse.json({ error: driverTeamError.message }, { status: 500 });
+            }
+            teamId = driverTeamData?.team ?? null;
+            currentDriverPoints = driverTeamData?.points ?? 0;
         }
-        const teamId = resolvedSeasonId
-            ? await getSeasonTeamForDriver(resolvedSeasonId, row.driverId)
-            : (driverTeamData?.team ?? null);
-        const currentDriverPoints = driverTeamData?.points ?? 0;
         // If driver didn't finish the race, they get zero points
         if (!row.racefinished) {
             // Save the race result with 0 points
@@ -265,35 +345,69 @@ export async function PUT(request: Request) {
         }
 
         // Update the driver's total championship points
-        const { error: updateError } = await adminSupabase
-            .from("drivers")
-            .update({ points: currentDriverPoints + totalPoints })
-            .eq("id", row.driverId);
-        if (updateError) {
-            console.error("Error updating driver points:", updateError);
-            return NextResponse.json({ error: updateError.message }, { status: 500 });
+        if (resolvedSeasonId) {
+            const { error: updateError } = await adminSupabase
+                .from("season_drivers")
+                .update({ points: currentDriverPoints + totalPoints })
+                .eq("season_id", resolvedSeasonId)
+                .eq("driver_id", row.driverId);
+            if (updateError) {
+                console.error("Error updating season driver points:", updateError);
+                return NextResponse.json({ error: updateError.message }, { status: 500 });
+            }
+        } else {
+            const { error: updateError } = await adminSupabase
+                .from("drivers")
+                .update({ points: currentDriverPoints + totalPoints })
+                .eq("id", row.driverId);
+            if (updateError) {
+                console.error("Error updating driver points:", updateError);
+                return NextResponse.json({ error: updateError.message }, { status: 500 });
+            }
         }
         console.log(`Updated result for driver ${row.driverId}, updated points to ${currentDriverPoints + totalPoints}`);
 
         // Increment the constructor (team) points for the current team
         if (teamId) {
-            const { data: teamData, error: teamFetchError } = await adminSupabase
-                .from("teams")
-                .select("points")
-                .eq("id", teamId)
-                .single();
-            if (teamFetchError) {
-                console.error("Error fetching team points:", teamFetchError);
-                return NextResponse.json({ error: teamFetchError.message }, { status: 500 });
-            }
-            const teamPoints = teamData?.points ?? 0;
-            const { error: teamUpdateError } = await adminSupabase
-                .from("teams")
-                .update({ points: teamPoints + totalPoints })
-                .eq("id", teamId);
-            if (teamUpdateError) {
-                console.error("Error updating team points:", teamUpdateError);
-                return NextResponse.json({ error: teamUpdateError.message }, { status: 500 });
+            if (resolvedSeasonId) {
+                const { data: seasonTeamData, error: teamFetchError } = await adminSupabase
+                    .from("season_teams")
+                    .select("points")
+                    .eq("season_id", resolvedSeasonId)
+                    .eq("team_id", teamId)
+                    .single();
+                if (teamFetchError) {
+                    // If the row doesn't exist yet, treat current points as 0.
+                }
+                const teamPoints = seasonTeamData?.points ?? 0;
+                const { error: teamUpdateError } = await adminSupabase
+                    .from("season_teams")
+                    .update({ points: teamPoints + totalPoints })
+                    .eq("season_id", resolvedSeasonId)
+                    .eq("team_id", teamId);
+                if (teamUpdateError) {
+                    console.error("Error updating season team points:", teamUpdateError);
+                    return NextResponse.json({ error: teamUpdateError.message }, { status: 500 });
+                }
+            } else {
+                const { data: teamData, error: teamFetchError } = await adminSupabase
+                    .from("teams")
+                    .select("points")
+                    .eq("id", teamId)
+                    .single();
+                if (teamFetchError) {
+                    console.error("Error fetching team points:", teamFetchError);
+                    return NextResponse.json({ error: teamFetchError.message }, { status: 500 });
+                }
+                const teamPoints = teamData?.points ?? 0;
+                const { error: teamUpdateError } = await adminSupabase
+                    .from("teams")
+                    .update({ points: teamPoints + totalPoints })
+                    .eq("id", teamId);
+                if (teamUpdateError) {
+                    console.error("Error updating team points:", teamUpdateError);
+                    return NextResponse.json({ error: teamUpdateError.message }, { status: 500 });
+                }
             }
         }
     }

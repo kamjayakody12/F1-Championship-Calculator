@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ColumnDef } from "@tanstack/react-table";
-import DataTable from "@/components/data-table";
 import {
   Card,
   CardContent,
@@ -64,67 +62,6 @@ export default function DriverStandingsPage() {
     setActiveDriver(driverParam === "all" ? "all" : driverParam);
   }, [searchParams]);
 
-  // Define table columns
-  const columns: ColumnDef<DriverRow>[] = useMemo(
-    () => [
-      {
-        accessorKey: "position",
-        header: "POS",
-        cell: ({ row }) => (
-          <span className="text-2xl font-bold text-gray-700 dark:text-gray-100">
-            {row.index + 1}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "name",
-        header: "DRIVER",
-        cell: ({ row }) => (
-          <div className="flex items-center gap-3">
-            <span className="font-semibold text-lg text-gray-900 dark:text-gray-100">
-              {row.original.name}
-            </span>
-          </div>
-        ),
-      },
-      {
-        accessorKey: "teamName",
-        header: "TEAM",
-        cell: ({ row }) => {
-          const isRB = row.original.teamName === "RB";
-          const isStakeF1 = row.original.teamName === "Stake F1 Team";
-          const logoSize = isRB || isStakeF1 ? "w-10 h-10" : "w-8 h-8";
-
-          return (
-            <div className="flex items-center">
-              {row.original.teamLogo ? (
-                <img
-                  src={row.original.teamLogo}
-                  alt={`${row.original.teamName} logo`}
-                  className={`${logoSize} object-contain bg-black/10 dark:bg-transparent rounded-lg p-1`}
-                />
-              ) : (
-                <span
-                  className={`inline-block ${logoSize} bg-gray-200 dark:bg-muted rounded-full flex-shrink-0`}
-                />
-              )}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "points",
-        header: "POINTS",
-        cell: ({ row }) => (
-          <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
-            {row.original.points}
-          </span>
-        ),
-      },
-    ],
-    []
-  );
-
   // Chart configuration
   const chartConfig: ChartConfig = useMemo(() => {
     const config: ChartConfig = {
@@ -150,6 +87,10 @@ export default function DriverStandingsPage() {
     dnfs: { label: "DNF/DSQ", color: "hsl(5, 100%, 60%)" },
   };
 
+  const progressionHeight = Math.max(300, chartData.length * 56);
+  const distributionHeight = Math.max(240, distributionData.length * 36 + 40);
+  const rankingHeight = Math.max(300, rankingData.length * 56);
+
   // Loading state
   if (loading) {
     return (
@@ -172,7 +113,52 @@ export default function DriverStandingsPage() {
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6 mb-4 sm:mb-6">
         {/* Driver Standings Table */}
         <div className="xl:col-span-4">
-          <DataTable columns={columns} data={drivers} />
+          <div className="bg-card rounded-2xl border border-border overflow-hidden">
+            <div className="px-4 py-3 grid grid-cols-[56px_1fr_96px] gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide bg-muted/20">
+              <div>POS</div>
+              <div>DRIVER</div>
+              <div className="text-right">POINTS</div>
+            </div>
+            <div className="p-2 space-y-2">
+              {drivers.map((driver: DriverRow, idx: number) => {
+                const lineColor = TEAM_COLOR_MAP[driver.teamName] || "hsl(0, 0%, 55%)";
+                const overlay = lineColor.replace("hsl(", "hsla(").replace(")", ", 0.20)");
+                const isRB = driver.teamName === "RB" || driver.teamName === "Stake F1 Team";
+                const logoSizeClass = isRB ? "w-9 h-9" : "w-8 h-8";
+
+                return (
+                  <div
+                    key={driver.id}
+                    className="px-4 py-3 rounded-xl border border-border bg-card/30 flex items-center gap-4 transition"
+                    style={{
+                      borderColor: lineColor,
+                      backgroundImage: `linear-gradient(to bottom right, ${overlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                      backgroundSize: "auto, 12px 12px",
+                      backgroundPosition: "center, 0 0",
+                    }}
+                  >
+                    <div className="w-14 text-sm font-semibold text-foreground text-center">{idx + 1}</div>
+                    <div className="flex-1 min-w-0 flex items-center gap-3">
+                      {driver.teamLogo ? (
+                        <img
+                          src={driver.teamLogo}
+                          alt={`${driver.teamName} logo`}
+                          className={`${logoSizeClass} object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1`}
+                        />
+                      ) : (
+                        <div className={`${logoSizeClass} rounded-full bg-muted/40 flex-shrink-0`} />
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground truncate">{driver.name}</div>
+                        <div className="text-xs text-muted-foreground/70 truncate">{driver.teamName}</div>
+                      </div>
+                    </div>
+                    <div className="w-24 text-right text-sm font-bold text-foreground">{driver.points}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Charts Grid */}
@@ -190,8 +176,10 @@ export default function DriverStandingsPage() {
             <CardContent className="p-0 flex-1 overflow-hidden">
               <div className="w-full h-full min-h-[450px] px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4">
                 <ChartContainer
+                  key={`driver-prog-${chartData.length}`}
                   config={chartConfig}
-                  className="w-full h-full overflow-visible"
+                  className="w-full overflow-visible"
+                  style={{ height: progressionHeight }}
                 >
                   <LineChart
                     accessibilityLayer
@@ -348,11 +336,12 @@ export default function DriverStandingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0 flex-1 overflow-hidden">
-            <div className="w-full h-full min-h-[450px] px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4 overflow-auto">
+            <div className="w-full h-full px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4 overflow-auto">
               <ChartContainer
+                key={`driver-dist-${distributionData.length}`}
                 config={chartConfig}
                 className="w-full"
-                style={{ height: Math.max(400, distributionData.length * 40) }}
+                style={{ height: distributionHeight }}
               >
                 <BarChart
                   accessibilityLayer
@@ -456,10 +445,12 @@ export default function DriverStandingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0 flex-1 overflow-hidden">
-            <div className="w-full h-full min-h-[450px] px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4">
+            <div className="w-full h-full px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4">
               <ChartContainer
+                key={`driver-rank-${rankingData.length}`}
                 config={chartConfig}
-                className="w-full h-full overflow-visible"
+                className="w-full overflow-visible"
+                style={{ height: rankingHeight }}
               >
                 <LineChart
                   accessibilityLayer

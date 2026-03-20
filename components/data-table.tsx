@@ -28,7 +28,9 @@ export default function DataTable<TData = any>({
   });
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
+    <div
+      className="overflow-x-auto rounded-lg border border-border bg-card"
+    >
       <table className="min-w-full table-auto divide-y divide-border">
         <thead className="bg-muted/50">
           {table.getHeaderGroups().map((headerGroup) => (

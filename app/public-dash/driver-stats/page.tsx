@@ -23,22 +23,7 @@ import {
   ChartTooltip,
 } from "@/components/ui/chart";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Label } from "recharts";
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip as ChartJSTooltip, Legend } from 'chart.js';
-import { SankeyController, Flow } from 'chartjs-chart-sankey';
-import { Chart } from 'react-chartjs-2';
 import { IconTrophy, IconMedal, IconTarget } from "@tabler/icons-react";
-
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  ChartJSTooltip,
-  Legend,
-  SankeyController,
-  Flow
-);
 
 interface Driver {
   id: string;
@@ -67,14 +52,15 @@ interface DriverStats {
   wins: number;
   podiums: number;
   pointsFinishes: number;
+  // Total points scored across all finished races for the driver (includes bonus points).
+  totalPoints: number;
   dnfs: number;
   totalRaces: number;
   finishPositions: { [key: number]: number };
-  startToFinishFlow: {
-    nodes: Array<{ name: string }>;
-    links: Array<{ source: number; target: number; value: number }>;
-  };
-  lapsLed: unknown[];
+  qualifyingPositions: { [key: number]: number };
+  qualifyingTrend: Array<{ race: string; position: number }>;
+  driverImage?: string;
+  driverNumber?: number | string | null;
   teamColors?: {
     primary: string;
     secondary: string;
@@ -105,7 +91,7 @@ export default function DriverStatsPage() {
   const [selectedDriver, setSelectedDriver] = useState<string>("");
   const [driverStats, setDriverStats] = useState<DriverStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [themeKey, setThemeKey] = useState(0);
+  const [seasonRacingDriverCount, setSeasonRacingDriverCount] = useState<number>(20);
 
   const searchParams = useSearchParams();
   const urlDriverId = useMemo(() => searchParams.get("driverId"), [searchParams]);
@@ -121,30 +107,13 @@ export default function DriverStatsPage() {
     }
   }, [selectedDriver, urlSeasonId]);
 
-  // Listen for theme changes to re-render chart
-  useEffect(() => {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-          setThemeKey(prev => prev + 1);
-        }
-      });
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
   const fetchData = async () => {
     try {
       const [
         { data: driversData },
         { data: teamsData },
         { data: results },
+        { data: seasonEntries },
         { data: tracksData },
         { data: selectedTracks },
         { data: rules }
@@ -154,6 +123,9 @@ export default function DriverStatsPage() {
         (urlSeasonId
           ? supabase.from('results').select('*').eq('season_id', urlSeasonId)
           : supabase.from('results').select('*')),
+        (urlSeasonId
+          ? supabase.from("season_driver_entries").select("driver_id, team_id").eq("season_id", urlSeasonId)
+          : Promise.resolve({ data: [] as any[] })),
         supabase.from('tracks').select('*'),
         (urlSeasonId
           ? supabase.from('selected_tracks').select('*, track(*)').eq('season_id', urlSeasonId)
@@ -179,11 +151,29 @@ export default function DriverStatsPage() {
       
       // Process drivers with team info
       const teamMap = new Map(teamsData.map((t: Record<string, unknown>) => [t.id as string, t]));
+      const seasonTeamByDriverId = new Map<string, string | null>(
+        ((seasonEntries as any[]) || []).map((e: any) => [String(e.driver_id), e.team_id || null])
+      );
+      const participatingDriverIds = new Set((effectiveResults || []).map((r: any) => String(r.driver)));
+      setSeasonRacingDriverCount(Math.max(1, participatingDriverIds.size));
       
       // Create selected track map for event type lookup
       const selectedTrackMap = new Map(effectiveSelectedTracks.map((st: Record<string, unknown>) => [st.id as string, st]));
-      const processedDrivers = driversData.map((d: Record<string, unknown>) => {
-        const team = teamMap.get(d.team as string);
+      const processedDrivers = driversData
+        .filter(
+          (d: Record<string, unknown>) =>
+            participatingDriverIds.has(String(d.id as string)) &&
+            !!String(
+              (urlSeasonId
+                ? (seasonTeamByDriverId.get(String(d.id as string)) ?? "")
+                : (d.team as string | null)) || ""
+            )
+        )
+        .map((d: Record<string, unknown>) => {
+        const resolvedTeamId = (urlSeasonId
+          ? (seasonTeamByDriverId.get(String(d.id as string)) ?? null)
+          : (d.team as string | null));
+        const team = teamMap.get((resolvedTeamId as string) || "");
         return {
           id: d.id as string,
           name: d.name as string,
@@ -221,6 +211,7 @@ export default function DriverStatsPage() {
         { data: tracksData },
         { data: selectedTracks },
         { data: rules },
+        { data: seasonDriverEntry },
         { data: driverData }
       ] = await Promise.all([
         (urlSeasonId
@@ -232,6 +223,14 @@ export default function DriverStatsPage() {
           ? supabase.from('selected_tracks').select('*, track(*)').eq('season_id', urlSeasonId)
           : supabase.from('selected_tracks').select('*, track(*)')),
         supabase.from('rules').select('polegivespoint, fastestlapgivespoint').eq('id', 1).single(),
+        (urlSeasonId
+          ? supabase
+              .from("season_driver_entries")
+              .select("team_id")
+              .eq("season_id", urlSeasonId)
+              .eq("driver_id", driverId)
+              .maybeSingle()
+          : Promise.resolve({ data: null as any })),
         supabase.from('drivers').select('*, team(*)').eq('id', driverId).single()
       ]);
 
@@ -289,13 +288,22 @@ export default function DriverStatsPage() {
       };
 
       // Get driver's team colors
-      const driverTeam = driverData.team;
+      const resolvedDriverTeamId = urlSeasonId
+        ? (seasonDriverEntry as any)?.team_id || null
+        : (driverData as any)?.team?.id || (driverData as any)?.team || null;
+      const driverTeam = teamMap.get(String(resolvedDriverTeamId || "")) as any;
       const teamName = driverTeam?.name || '';
       const teamColors = getTeamColorVariations(teamName);
 
+      // Driver image (optional; depends on what's stored in the `drivers` table)
+      const driverImage: string = (driverData as any)?.image || (driverData as any)?.carImage || "";
+      const driverNumber: number | string | null =
+        (driverData as any)?.driver_number ?? (driverData as any)?.number ?? null;
+
       // Process race results
       const raceResults: RaceResult[] = effectiveResults.map((result: Record<string, unknown>) => {
-        const team = teamMap.get((result.team as string) || '');
+        const resolvedTeamId = (result as any).team_id || resolvedDriverTeamId || '';
+        const team = teamMap.get(String(resolvedTeamId));
         const trackName = trackMap.get(result.track as string) || 'Unknown';
         
         // Calculate points with rules
@@ -325,7 +333,7 @@ export default function DriverStatsPage() {
           position: (result.finishing_position as number) ?? (result.position as number),
           driver: result.driver as string,
           driverName: 'Driver', // Will be filled from driver data
-          teamId: (result.team as string) || '',
+          teamId: String(resolvedTeamId || ''),
           teamName: (team as Record<string, unknown>)?.name as string || 'Unknown',
           points,
           pole: (result.pole as boolean) || false,
@@ -340,23 +348,36 @@ export default function DriverStatsPage() {
          wins: 0,
          podiums: 0,
          pointsFinishes: 0,
+        totalPoints: 0,
          dnfs: 0,
          totalRaces: raceResults.length,
          finishPositions: {},
-         startToFinishFlow: {
-           nodes: [],
-           links: []
-         },
-         lapsLed: [],
+         qualifyingPositions: {},
+         qualifyingTrend: [],
+        driverImage,
+        driverNumber,
          teamColors
        };
 
       // Process each result
       raceResults.forEach((result) => {
+        const qualPosRaw = result.qualified_position;
+        const qualPos = typeof qualPosRaw === "number" ? qualPosRaw : Number(qualPosRaw);
+        if (Number.isFinite(qualPos) && qualPos > 0) {
+          stats.qualifyingPositions[qualPos] = (stats.qualifyingPositions[qualPos] || 0) + 1;
+          stats.qualifyingTrend.push({
+            race: result.trackName || `Race ${stats.qualifyingTrend.length + 1}`,
+            position: qualPos,
+          });
+        }
+
         if (!result.racefinished) {
           stats.dnfs++;
           return;
         }
+
+        // Sum up points for every finished race (including bonus points).
+        stats.totalPoints += result.points;
 
         // Count finish positions
         const pos = result.position;
@@ -373,46 +394,6 @@ export default function DriverStatsPage() {
         } else if (pos >= 4 && pos <= 10) {
           stats.pointsFinishes++;
         }
-
-                 // Create start to finish flow data for Sankey diagram
-         // Use qualified_position if available, otherwise use grid position or assume starting position
-         const startPosition = result.qualified_position || result.position || 20; // Default to back of grid if no data
-         const finishPosition = result.position;
-         
-         const startNode = `Start P${startPosition}`;
-         const finishNode = `Finish P${finishPosition}`;
-         
-         // Add nodes if they don't exist
-         if (!stats.startToFinishFlow.nodes.find(n => n.name === startNode)) {
-           stats.startToFinishFlow.nodes.push({ name: startNode });
-         }
-         if (!stats.startToFinishFlow.nodes.find(n => n.name === finishNode)) {
-           stats.startToFinishFlow.nodes.push({ name: finishNode });
-         }
-         
-         // Find existing link or create new one
-         const existingLink = stats.startToFinishFlow.links.find(
-           link => link.source === stats.startToFinishFlow.nodes.findIndex(n => n.name === startNode) &&
-                   link.target === stats.startToFinishFlow.nodes.findIndex(n => n.name === finishNode)
-         );
-         
-         if (existingLink) {
-           existingLink.value += 1;
-         } else {
-           stats.startToFinishFlow.links.push({
-             source: stats.startToFinishFlow.nodes.findIndex(n => n.name === startNode),
-             target: stats.startToFinishFlow.nodes.findIndex(n => n.name === finishNode),
-             value: 1
-           });
-         }
-
-        // Mock laps led data (you'll need to add this to your database)
-        const mockLapsLed = Math.floor(Math.random() * 60) + 1;
-        stats.lapsLed.push({
-          race: result.trackName,
-          lapsLed: mockLapsLed,
-          totalLaps: 60
-        });
       });
 
              
@@ -440,6 +421,7 @@ export default function DriverStatsPage() {
   const wins = driverStats?.wins || 0;
   const podiums = driverStats?.podiums || 0; // P1-P3
   const pointsFinishes = driverStats?.pointsFinishes || 0; // P1-P10
+  const pointsScored = driverStats?.totalPoints || 0;
   const dnfs = driverStats?.dnfs || 0;
   
      // Create data array for Interactive Pie chart with team colors
@@ -460,7 +442,7 @@ export default function DriverStatsPage() {
        category: "points", 
        value: pointsFinishes,
        fill: driverStats?.teamColors?.secondary || COLORS.pointsFinishes,
-       label: "Points"
+      label: "Points Finishes"
      },
      { 
        category: "dnfs", 
@@ -497,23 +479,74 @@ export default function DriverStatsPage() {
      } satisfies ChartConfig;
 
   const finishPositionsData = driverStats ? 
-    Array.from({ length: 20 }, (_, i) => ({
+    Array.from({ length: seasonRacingDriverCount }, (_, i) => ({
       position: `P${i + 1}`,
       count: driverStats.finishPositions[i + 1] || 0
     })) : [];
 
+  const qualifyingPositionsData = driverStats
+    ? Array.from({ length: seasonRacingDriverCount }, (_, i) => ({
+        position: `P${i + 1}`,
+        count: driverStats.qualifyingPositions[i + 1] || 0,
+      }))
+    : [];
+
   const pointsPercentage = driverStats ? 
     Math.round((driverStats.pointsFinishes / driverStats.totalRaces) * 100) : 0;
 
-  // Simple responsive helpers for charts
-  const isSmallScreen = typeof window !== 'undefined' && window.innerWidth < 640;
-  const sankeyNodeWidth = isSmallScreen ? 18 : 30;
-  const sankeyPadding = isSmallScreen
-    ? { top: 12, bottom: 12, left: 16, right: 16 }
-    : { top: 20, bottom: 20, left: 24, right: 24 };
+  const toAlphaHsl = (hsl: string, alpha: number) => {
+    // Convert `hsl(h, s%, l%)` -> `hsla(h, s%, l%, alpha)` for rgba-like gradients.
+    const match = hsl.match(/hsl\(\s*(\d+),\s*(\d+)%\s*,\s*(\d+)%\s*\)/);
+    if (!match) return hsl;
+    const [, h, s, l] = match;
+    return `hsla(${h}, ${s}%, ${l}%, ${alpha})`;
+  };
+
+  const setHslLightness = (hsl: string, lightness: number) => {
+    const match = hsl.match(/hsl\(\s*(\d+),\s*(\d+)%\s*,\s*(\d+)%\s*\)/);
+    if (!match) return hsl;
+    const [, h, s] = match;
+    return `hsl(${h}, ${s}%, ${lightness}%)`;
+  };
+
+  const pageGlowPrimary = toAlphaHsl(driverStats?.teamColors?.primary || COLORS.primary, 0.22);
+  const pageGlowSecondary = toAlphaHsl(driverStats?.teamColors?.secondary || COLORS.secondary, 0.12);
+
+  const makeTeamTileVars = (baseColor: string) => {
+    const baseTop = setHslLightness(baseColor, 30);
+    const overlay = toAlphaHsl(baseTop, 0.25);
+    const corner = toAlphaHsl(setHslLightness(baseColor, 36), 0.28);
+    const glow = toAlphaHsl(baseColor, 0.95);
+    return {
+      overlay,
+      corner,
+      glow,
+    };
+  };
+
+  const vizBase = driverStats?.teamColors?.primary || COLORS.primary;
+  const { overlay: vizOverlay, corner: vizCorner, glow: vizGlow } = makeTeamTileVars(vizBase);
 
   return (
-    <div className="p-4 md:p-8 space-y-6 md:space-y-8">
+    <div className="relative">
+      {/* Team-color glow behind the whole page (outside padded content to avoid corner gaps) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -inset-6 -z-10"
+        style={{
+          background: `linear-gradient(to bottom, ${toAlphaHsl(
+            driverStats?.teamColors?.primary || COLORS.primary,
+            0.14
+          )} 0%, rgba(0,0,0,0) 20%),
+                       radial-gradient(ellipse at 0% 0%, ${toAlphaHsl(
+            driverStats?.teamColors?.primary || COLORS.primary,
+            0.2
+          )} 0%, rgba(0,0,0,0) 42%),
+                       radial-gradient(ellipse at 80% 20%, ${pageGlowPrimary} 0%, rgba(0,0,0,0) 60%),
+                       radial-gradient(ellipse at 20% 85%, ${pageGlowSecondary} 0%, rgba(0,0,0,0) 55%)`,
+        }}
+      />
+      <div className="p-3 md:p-4 space-y-3 md:space-y-4">
       {/* Header with driver selection */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -532,358 +565,538 @@ export default function DriverStatsPage() {
         </div>
       </div>
 
-              {/* Top stats cards */}
-       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 items-stretch">
-         <Card className="min-h-[120px]">
-           <CardHeader className="pb-2 min-h-[88px]">
-             <div className="flex items-start justify-between">
-               <div className="flex-1">
-                 <CardTitle 
-                   className="text-2xl font-bold mb-2" 
-                   style={{ color: driverStats?.teamColors?.accent || COLORS.wins }}
-                 >
-                   {driverStats?.wins || 0}
-                 </CardTitle>
-                 <CardDescription>Wins</CardDescription>
-               </div>
-               <IconTrophy className="h-6 w-6 text-muted-foreground/60" />
-             </div>
-           </CardHeader>
-         </Card>
-         <Card className="min-h-[120px]">
-           <CardHeader className="pb-2 min-h-[88px]">
-             <div className="flex items-start justify-between">
-               <div className="flex-1">
-                 <CardTitle 
-                   className="text-2xl font-bold mb-2" 
-                   style={{ color: driverStats?.teamColors?.primary || COLORS.podiums }}
-                 >
-                   {driverStats?.podiums || 0}
-                 </CardTitle>
-                 <CardDescription>Podiums</CardDescription>
-               </div>
-               <IconMedal className="h-6 w-6 text-muted-foreground/60" />
-             </div>
-           </CardHeader>
-         </Card>
-         <Card className="min-h-[120px]">
-           <CardHeader className="pb-2 min-h-[88px]">
-             <div className="flex items-start justify-between">
-               <div className="flex-1">
-                 <CardTitle 
-                   className="text-2xl font-bold mb-2" 
-                   style={{ color: driverStats?.teamColors?.secondary || COLORS.pointsFinishes }}
-                 >
-                   {driverStats?.pointsFinishes || 0}
-                 </CardTitle>
-                 <CardDescription>Points Finishes</CardDescription>
-               </div>
-               <IconTarget className="h-6 w-6 text-muted-foreground/60" />
-             </div>
-           </CardHeader>
-         </Card>
-       </div>
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-3 md:gap-4 items-stretch">
+                {/* Left: compact tiles + charts */}
+                <div className="space-y-3 md:space-y-4">
+                  {/* Top compact stat tiles */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {(() => {
+                      const base = driverStats?.teamColors?.accent || COLORS.wins;
+                      const { overlay, corner, glow } = makeTeamTileVars(base);
+                      return (
+                        <Card
+                          className="min-h-[92px] py-0 gap-0 relative overflow-hidden driver-tile-beam-parent"
+                          style={{
+                            backgroundColor: "#070708",
+                            backgroundImage: `linear-gradient(to bottom right, ${overlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                            backgroundSize: "auto, 12px 12px",
+                            backgroundPosition: "center, 0 0",
+                            ["--driver-tile-glow" as any]: glow,
+                            ["--driver-tile-glow-blur" as any]: "30px",
+                          }}
+                        >
+                          <div
+                            aria-hidden
+                            className="pointer-events-none absolute top-0 left-0 w-28 h-28 z-0"
+                            style={{
+                              background: `radial-gradient(circle at 0% 0%, ${corner} 0%, rgba(0,0,0,0) 78%)`,
+                            }}
+                          />
+                          <CardHeader className="relative z-[1] pt-4 pb-2 min-h-[72px] px-6">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <CardTitle className="text-xl font-bold mb-1 driver-number-beam" style={{ color: base }}>
+                                  {driverStats?.wins || 0}
+                                </CardTitle>
+                                <CardDescription className="text-xs driver-name-beam">Wins</CardDescription>
+                              </div>
+                              <IconTrophy className="h-5 w-5 text-muted-foreground/60" />
+                            </div>
+                          </CardHeader>
+                        </Card>
+                      );
+                    })()}
 
-               {/* Main charts - 2 columns */}
-       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 items-stretch">
-         {/* Season Performance Chart */}
-         <Card>
-           <CardHeader>
-             <CardTitle>Season Performance</CardTitle>
-             <CardDescription>Distribution of race outcomes</CardDescription>
-           </CardHeader>
-           <CardContent>
-              <div className="w-full h-[260px] sm:h-[300px] md:h-[350px] relative flex items-center justify-center">
-               <ChartContainer
-                 config={chartConfig}
-                 className="mx-auto aspect-square w-full max-w-[280px]"
-               >
-                 <PieChart>
-                   <ChartTooltip
-                     cursor={false}
-                     content={({ active, payload }) => {
-                       if (active && payload && payload.length) {
-                         const data = payload[0].payload;
-                         return (
-                           <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                             <p className="font-medium">{data.label}</p>
-                             <p className="text-muted-foreground">{data.value} races</p>
-                           </div>
-                         );
-                       }
-                       return null;
-                     }}
-                   />
-                   <Pie
-                     data={seasonPerformanceData}
-                     dataKey="value"
-                     nameKey="category"
-                     innerRadius={60}
-                     strokeWidth={5}
-                   >
-                     <Label
-                       content={({ viewBox }) => {
-                         if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                           return (
-                             <text
-                               x={viewBox.cx}
-                               y={viewBox.cy}
-                               textAnchor="middle"
-                               dominantBaseline="middle"
-                             >
-                               <tspan
-                                 x={viewBox.cx}
-                                 y={viewBox.cy}
-                                 className="fill-foreground text-3xl font-bold"
-                               >
-                                 {driverStats?.totalRaces || 0}
-                               </tspan>
-                               <tspan
-                                 x={viewBox.cx}
-                                 y={(viewBox.cy || 0) + 24}
-                                 className="fill-muted-foreground"
-                               >
-                                 Total Races
-                               </tspan>
-                             </text>
-                           )
-                         }
-                       }}
-                     />
-                   </Pie>
-                 </PieChart>
-               </ChartContainer>
-             </div>
-           </CardContent>
-         </Card>
+                    {(() => {
+                      const base = driverStats?.teamColors?.primary || COLORS.podiums;
+                      const { overlay, corner, glow } = makeTeamTileVars(base);
+                      return (
+                        <Card
+                          className="min-h-[92px] py-0 gap-0 relative overflow-hidden driver-tile-beam-parent"
+                          style={{
+                            backgroundColor: "#070708",
+                            backgroundImage: `linear-gradient(to bottom right, ${overlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                            backgroundSize: "auto, 12px 12px",
+                            backgroundPosition: "center, 0 0",
+                            ["--driver-tile-glow" as any]: glow,
+                            ["--driver-tile-glow-blur" as any]: "30px",
+                          }}
+                        >
+                          <div
+                            aria-hidden
+                            className="pointer-events-none absolute top-0 left-0 w-28 h-28 z-0"
+                            style={{
+                              background: `radial-gradient(circle at 0% 0%, ${corner} 0%, rgba(0,0,0,0) 78%)`,
+                            }}
+                          />
+                          <CardHeader className="relative z-[1] pt-4 pb-2 min-h-[72px] px-6">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <CardTitle className="text-xl font-bold mb-1 driver-number-beam" style={{ color: base }}>
+                                  {driverStats?.podiums || 0}
+                                </CardTitle>
+                                <CardDescription className="text-xs driver-name-beam">Podiums</CardDescription>
+                              </div>
+                              <IconMedal className="h-5 w-5 text-muted-foreground/60" />
+                            </div>
+                          </CardHeader>
+                        </Card>
+                      );
+                    })()}
 
-         {/* Finish Positions in Points Chart */}
-         <Card>
-           <CardHeader>
-             <CardTitle>Finish Positions in Points</CardTitle>
-             <CardDescription>Percentage of finishes in points</CardDescription>
-           </CardHeader>
-           <CardContent>
-              <div className="w-full h-[260px] sm:h-[300px] md:h-[350px] flex items-center justify-center">
-               <ResponsiveContainer width="100%" height="100%">
-                 <PieChart>
-                   <Pie
-                     data={[
-                       { name: 'In Points', value: driverStats?.pointsFinishes || 0 },
-                       { name: 'Outside Points', value: (driverStats?.totalRaces || 0) - (driverStats?.pointsFinishes || 0) }
-                     ]}
-                     cx="50%"
-                     cy="50%"
-                     innerRadius={60}
-                     outerRadius={100}
-                     paddingAngle={5}
-                     dataKey="value"
-                     strokeWidth={0}
-                   >
-                     <Cell fill={driverStats?.teamColors?.primary || COLORS.primary} />
-                     <Cell fill="#e5e7eb" />
-                     <Label
-                       content={({ viewBox }) => {
-                         if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                           return (
-                             <text
-                               x={viewBox.cx}
-                               y={viewBox.cy}
-                               textAnchor="middle"
-                               dominantBaseline="middle"
-                             >
-                               <tspan
-                                 x={viewBox.cx}
-                                 y={viewBox.cy}
-                                 className="fill-foreground text-3xl font-bold"
-                                 style={{ fill: driverStats?.teamColors?.primary || COLORS.primary }}
-                               >
-                                 {pointsPercentage}%
-                               </tspan>
-                               <tspan
-                                 x={viewBox.cx}
-                                 y={(viewBox.cy || 0) + 24}
-                                 className="fill-muted-foreground text-sm"
-                               >
-                                 {driverStats?.pointsFinishes || 0} In Points
-                               </tspan>
-                             </text>
-                           )
-                         }
-                       }}
-                     />
-                   </Pie>
-                   <ChartTooltip
-                     content={({ active, payload }) => {
-                       if (active && payload && payload.length) {
-                         return (
-                           <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                             <p className="font-medium">{payload[0].name}</p>
-                             <p className="text-muted-foreground">{payload[0].value} races</p>
-                           </div>
-                         );
-                       }
-                       return null;
-                     }}
-                   />
-                 </PieChart>
-               </ResponsiveContainer>
-             </div>
-           </CardContent>
-         </Card>
-       </div>
+                    {(() => {
+                      const base = driverStats?.teamColors?.secondary || COLORS.pointsFinishes;
+                      const { overlay, corner, glow } = makeTeamTileVars(base);
+                      return (
+                        <Card
+                          className="min-h-[92px] py-0 gap-0 relative overflow-hidden driver-tile-beam-parent"
+                          style={{
+                            backgroundColor: "#070708",
+                            backgroundImage: `linear-gradient(to bottom right, ${overlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                            backgroundSize: "auto, 12px 12px",
+                            backgroundPosition: "center, 0 0",
+                            ["--driver-tile-glow" as any]: glow,
+                            ["--driver-tile-glow-blur" as any]: "30px",
+                          }}
+                        >
+                          <div
+                            aria-hidden
+                            className="pointer-events-none absolute top-0 left-0 w-28 h-28 z-0"
+                            style={{
+                              background: `radial-gradient(circle at 0% 0%, ${corner} 0%, rgba(0,0,0,0) 78%)`,
+                            }}
+                          />
+                          <CardHeader className="relative z-[1] pt-4 pb-2 min-h-[72px] px-6">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <CardTitle className="text-xl font-bold mb-1 driver-number-beam" style={{ color: base }}>
+                                  {pointsScored}
+                                </CardTitle>
+                                <CardDescription className="text-xs driver-name-beam">Points scored</CardDescription>
+                              </div>
+                              <IconTarget className="h-5 w-5 text-muted-foreground/60" />
+                            </div>
+                          </CardHeader>
+                        </Card>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Pie chart tiles */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 items-stretch">
+                    <Card
+                      className="overflow-hidden driver-tile-beam-parent border-transparent bg-transparent py-0"
+                      style={{
+                        backgroundColor: "#070708",
+                        backgroundImage: `linear-gradient(to bottom right, ${vizOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                        backgroundSize: "auto, 12px 12px",
+                        backgroundPosition: "center, 0 0",
+                        ["--driver-tile-glow" as any]: vizGlow,
+                        ["--driver-tile-glow-blur" as any]: "30px",
+                      }}
+                    >
+                      <div
+                        aria-hidden
+                        className="pointer-events-none absolute top-0 left-0 w-28 h-28 z-[0]"
+                        style={{
+                          background: `radial-gradient(circle at 0% 0%, ${vizCorner} 0%, rgba(0,0,0,0) 78%)`,
+                        }}
+                      />
+                      <CardHeader className="relative z-[1] pt-4 pb-2">
+                        <CardTitle>Season Performance</CardTitle>
+                        <CardDescription>Distribution of race outcomes</CardDescription>
+                      </CardHeader>
+                      <CardContent className="relative z-[1]">
+                        <div className="w-full h-[220px] sm:h-[240px] relative flex items-center justify-center">
+                          <ChartContainer
+                            config={chartConfig}
+                            className="mx-auto aspect-square w-full max-w-[240px]"
+                          >
+                            <PieChart>
+                              <ChartTooltip
+                                cursor={false}
+                                content={({ active, payload }) => {
+                                  if (active && payload && payload.length) {
+                                    const data = payload[0].payload;
+                                    return (
+                                      <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                                        <p className="font-medium">{data.label}</p>
+                                        <p className="text-muted-foreground">{data.value} races</p>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                }}
+                              />
+                              <Pie
+                                data={seasonPerformanceData}
+                                dataKey="value"
+                                nameKey="category"
+                                innerRadius={55}
+                                strokeWidth={5}
+                              >
+                                <Label
+                                  content={({ viewBox }) => {
+                                    if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                                      return (
+                                        <text
+                                          x={viewBox.cx}
+                                          y={viewBox.cy}
+                                          textAnchor="middle"
+                                          dominantBaseline="middle"
+                                        >
+                                          <tspan
+                                            x={viewBox.cx}
+                                            y={viewBox.cy}
+                                            className="fill-foreground text-2xl font-bold"
+                                          >
+                                            {driverStats?.totalRaces || 0}
+                                          </tspan>
+                                          <tspan
+                                            x={viewBox.cx}
+                                            y={(viewBox.cy || 0) + 20}
+                                            className="fill-muted-foreground"
+                                          >
+                                            Total Races
+                                          </tspan>
+                                        </text>
+                                      );
+                                    }
+                                    return null;
+                                  }}
+                                />
+                              </Pie>
+                            </PieChart>
+                          </ChartContainer>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card
+                      className="overflow-hidden driver-tile-beam-parent border-transparent bg-transparent py-0"
+                      style={{
+                        backgroundColor: "#070708",
+                        backgroundImage: `linear-gradient(to bottom right, ${vizOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                        backgroundSize: "auto, 12px 12px",
+                        backgroundPosition: "center, 0 0",
+                        ["--driver-tile-glow" as any]: vizGlow,
+                        ["--driver-tile-glow-blur" as any]: "30px",
+                      }}
+                    >
+                      <div
+                        aria-hidden
+                        className="pointer-events-none absolute top-0 left-0 w-28 h-28 z-[0]"
+                        style={{
+                          background: `radial-gradient(circle at 0% 0%, ${vizCorner} 0%, rgba(0,0,0,0) 78%)`,
+                        }}
+                      />
+                      <CardHeader className="relative z-[1] pt-4 pb-2">
+                        <CardTitle>Finish Positions in Points</CardTitle>
+                        <CardDescription>Percentage of finishes in points</CardDescription>
+                      </CardHeader>
+                      <CardContent className="relative z-[1]">
+                        <div className="w-full h-[220px] sm:h-[240px] flex items-center justify-center">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={[
+                                  { name: "In Points", value: driverStats?.pointsFinishes || 0 },
+                                  {
+                                    name: "Outside Points",
+                                    value:
+                                      (driverStats?.totalRaces || 0) - (driverStats?.pointsFinishes || 0),
+                                  },
+                                ]}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={55}
+                                outerRadius={95}
+                                paddingAngle={5}
+                                dataKey="value"
+                                strokeWidth={0}
+                              >
+                                <Cell fill={driverStats?.teamColors?.primary || COLORS.primary} />
+                                <Cell fill="#e5e7eb" />
+                                <Label
+                                  content={({ viewBox }) => {
+                                    if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                                      return (
+                                        <text
+                                          x={viewBox.cx}
+                                          y={viewBox.cy}
+                                          textAnchor="middle"
+                                          dominantBaseline="middle"
+                                        >
+                                          <tspan
+                                            x={viewBox.cx}
+                                            y={viewBox.cy}
+                                            className="fill-foreground text-2xl font-bold"
+                                            style={{
+                                              fill: driverStats?.teamColors?.primary || COLORS.primary,
+                                            }}
+                                          >
+                                            {pointsPercentage}%
+                                          </tspan>
+                                          <tspan
+                                            x={viewBox.cx}
+                                            y={(viewBox.cy || 0) + 20}
+                                            className="fill-muted-foreground text-xs"
+                                          >
+                                            {driverStats?.pointsFinishes || 0} In Points
+                                          </tspan>
+                                        </text>
+                                      );
+                                    }
+                                    return null;
+                                  }}
+                                />
+                              </Pie>
+                              <ChartTooltip
+                                content={({ active, payload }) => {
+                                  if (active && payload && payload.length) {
+                                    return (
+                                      <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                                        <p className="font-medium">{payload[0].name}</p>
+                                        <p className="text-muted-foreground">
+                                          {payload[0].value} races
+                                        </p>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+                {/* Right: driver image (free-floating) */}
+                <div className="relative min-h-[220px] md:min-h-[240px] flex items-center justify-center">
+                  <div
+                    aria-hidden
+                    className="absolute inset-0 opacity-90 pointer-events-none"
+                    style={{
+                      background: `radial-gradient(ellipse at 80% 10%, ${
+                        driverStats?.teamColors?.primary || "hsl(210, 100%, 60%)"
+                      }55 0%, rgba(0,0,0,0) 55%), radial-gradient(ellipse at 15% 85%, ${
+                        driverStats?.teamColors?.secondary || "hsl(210, 100%, 60%)"
+                      }33 0%, rgba(0,0,0,0) 60%)`,
+                    }}
+                  />
+                  <div
+                    aria-hidden
+                    className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/25 to-transparent pointer-events-none"
+                  />
+
+                  {driverStats?.driverImage ? (
+                    <>
+                      <div
+                        aria-hidden
+                        className="absolute bottom-0 left-1/2 -translate-x-1/2 z-[2] w-[220px] h-[220px] rounded-full overflow-hidden flex items-center justify-center pointer-events-none select-none"
+                        style={{
+                          border: `2px solid ${driverStats.teamColors?.primary || COLORS.primary}`,
+                          boxShadow: `0 0 0 10px ${toAlphaHsl(
+                            driverStats.teamColors?.primary || COLORS.primary,
+                            0.08
+                          )}`,
+                        }}
+                      >
+                        <img
+                          src={driverStats.driverImage}
+                          alt={`${selectedDriver} image`}
+                          className="w-full h-full object-cover opacity-95"
+                          style={{
+                            // Stronger edge fade so it feels "inside the circle" instead of just clipped.
+                            WebkitMaskImage:
+                              "radial-gradient(circle at 50% 55%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 58%, rgba(0,0,0,0) 88%)",
+                            maskImage:
+                              "radial-gradient(circle at 50% 55%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 58%, rgba(0,0,0,0) 88%)",
+                            transform: "scale(1.05)",
+                            transformOrigin: "center",
+                          }}
+                        />
+
+                        {driverStats?.driverNumber ? (
+                          <div
+                            aria-hidden
+                            className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
+                            style={{
+                              fontSize: 120,
+                              fontWeight: 900,
+                              fontStyle: "italic",
+                              color: driverStats.teamColors?.primary || "#ffffff",
+                              opacity: 0.06,
+                              letterSpacing: "-0.06em",
+                            }}
+                          >
+                            {driverStats.driverNumber}
+                          </div>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                      No driver image
+                    </div>
+                  )}
+                </div>
+              </div>
 
         
 
-             {/* Start to Finish Position Flow - Sankey Diagram */}
-       <Card className="mt-6">
-         <CardHeader>
-           <CardTitle>Start to Finish Position Flow</CardTitle>
-           <CardDescription>How qualifying positions translate to finishing positions</CardDescription>
-         </CardHeader>
-         <CardContent>
-           {driverStats?.startToFinishFlow?.nodes && driverStats.startToFinishFlow.nodes.length > 0 ? (
-             <div className="w-full h-[520px] sm:h-[560px] md:h-[600px] bg-transparent rounded-lg px-4 sm:px-6 py-3 sm:py-4">
-               <Chart
-                 key={themeKey}
-                 type="sankey"
-                 data={{
-                   datasets: [{
-                     label: 'Position Flow',
-                     data: driverStats.startToFinishFlow.links
-                       .sort((a, b) => {
-                         // Sort by source position first, then target position
-                         const sourceA = parseInt(driverStats.startToFinishFlow.nodes[a.source]?.name?.replace('Start P', '').replace('Finish P', '') || '0');
-                         const sourceB = parseInt(driverStats.startToFinishFlow.nodes[b.source]?.name?.replace('Start P', '').replace('Finish P', '') || '0');
-                         if (sourceA !== sourceB) return sourceA - sourceB;
-                         
-                         const targetA = parseInt(driverStats.startToFinishFlow.nodes[a.target]?.name?.replace('Start P', '').replace('Finish P', '') || '0');
-                         const targetB = parseInt(driverStats.startToFinishFlow.nodes[b.target]?.name?.replace('Start P', '').replace('Finish P', '') || '0');
-                         return targetA - targetB;
-                       })
-                       .map(link => ({
-                         from: driverStats.startToFinishFlow.nodes[link.source]?.name || '',
-                         to: driverStats.startToFinishFlow.nodes[link.target]?.name || '',
-                         flow: link.value
-                       })),
-                     colorFrom: () => {
-                       const isDark = document.documentElement.classList.contains('dark');
-                       const baseColor = driverStats?.teamColors?.primary || COLORS.primary;
-                       return isDark ? baseColor : baseColor.replace(')', ', 0.8)').replace('hsl(', 'hsla(');
-                     },
-                     colorTo: () => {
-                       const isDark = document.documentElement.classList.contains('dark');
-                       const baseColor = driverStats?.teamColors?.primary || COLORS.primary;
-                       return isDark ? baseColor : baseColor.replace(')', ', 0.8)').replace('hsl(', 'hsla(');
-                     },
-                     color: (driverStats?.teamColors?.secondary || COLORS.secondary),
-                     borderWidth: 0,
-                     nodeWidth: sankeyNodeWidth
-                   }]
-                 }}
-                 options={{
-                   responsive: true,
-                   maintainAspectRatio: false,
-                   backgroundColor: 'transparent',
-                   scales: {
-                     x: {
-                       display: false
-                     },
-                     y: {
-                       display: false
-                     }
-                   },
-                   plugins: {
-                     legend: {
-                       display: false
-                     },
-                     tooltip: {
-                       backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                       titleColor: 'white',
-                       bodyColor: 'white',
-                       borderColor: (driverStats?.teamColors?.primary || COLORS.primary),
-                       borderWidth: 2,
-                       cornerRadius: 8,
-                       displayColors: false,
-                       callbacks: {
-                         title: function() {
-                           return 'Position Flow';
-                         },
-                         label: function() {
-                           return 'Race flow data';
-                         }
-                       }
-                     }
-                   },
-                   layout: {
-                     padding: sankeyPadding
-                   }
-                 }}
-               />
-             </div>
-           ) : (
-             <div className="text-center py-8 text-muted-foreground">
-               <p>No qualifying data available for this driver</p>
-               <p className="text-sm">Qualifying results are needed to show the flow diagram</p>
-             </div>
-           )}
-         </CardContent>
-       </Card>
-
-       {/* Finish Positions Distribution Bar Chart - Full Width */}
-       <Card className="mt-6">
-         <CardHeader>
-           <CardTitle>Finish Positions Distribution</CardTitle>
-           <CardDescription>Count of finishes for each position</CardDescription>
-         </CardHeader>
-         <CardContent>
-            <div className="w-full h-[400px] sm:h-[450px] md:h-[500px]">
-             <ResponsiveContainer width="100%" height="100%">
-               <BarChart data={finishPositionsData} margin={{ left: 20, right: 20, top: 20, bottom: 20 }}>
-                 <CartesianGrid strokeDasharray="3 3" />
-                 <XAxis
-                   dataKey="position"
-                   tickMargin={8}
-                   padding={{ left: 20, right: 20 }}
-                   tickLine={false}
-                   axisLine={false}
-                   fontSize={12}
-                 />
-                 <YAxis
-                   hide={false}
-                   mirror={false}
-                   tickMargin={8}
-                   tickLine={false}
-                   axisLine={false}
-                   width={40}
-                   tickCount={6}
-                   domain={[0, 'dataMax']}
-                   allowDecimals={false}
-                   fontSize={12}
-                 />
-                 <Bar 
-                   dataKey="count" 
-                   fill={driverStats?.teamColors?.primary || COLORS.primary}
-                   radius={[4, 4, 0, 0]}
-                 />
-                 <ChartTooltip
-                   content={({ active, payload, label }) => {
-                     if (active && payload && payload.length) {
-                       return (
-                         <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                           <p className="font-medium">{label}</p>
-                           <p className="text-muted-foreground">{payload[0].value} finishes</p>
-                         </div>
-                       );
-                     }
-                     return null;
-                   }}
-                 />
-               </BarChart>
-             </ResponsiveContainer>
-           </div>
-         </CardContent>
-       </Card>
-     </div>
+       {/* Bottom visualizations */}
+      <div className="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <Card
+        className="overflow-hidden driver-tile-beam-parent border-transparent bg-transparent py-0"
+        style={{
+          backgroundColor: "#070708",
+          backgroundImage: `linear-gradient(to bottom right, ${vizOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+          backgroundSize: "auto, 12px 12px",
+          backgroundPosition: "center, 0 0",
+          ["--driver-tile-glow" as any]: vizGlow,
+          ["--driver-tile-glow-blur" as any]: "30px",
+        }}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-0 left-0 w-28 h-28 z-[0]"
+          style={{
+            background: `radial-gradient(circle at 0% 0%, ${vizCorner} 0%, rgba(0,0,0,0) 78%)`,
+          }}
+        />
+        <CardHeader className="relative z-[1] pt-4 pb-2">
+          <CardTitle>Finish Positions Distribution</CardTitle>
+          <CardDescription>Count of finishes for each position</CardDescription>
+        </CardHeader>
+        <CardContent className="relative z-[1]">
+         <div className="w-full h-[220px] sm:h-[250px] md:h-[280px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={finishPositionsData}
+                margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="position"
+                  tickMargin={8}
+                  padding={{ left: 20, right: 20 }}
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                />
+                <YAxis
+                  hide={false}
+                  mirror={false}
+                  tickMargin={8}
+                  tickLine={false}
+                  axisLine={false}
+                  width={40}
+                  tickCount={6}
+                  domain={[0, "dataMax"]}
+                  allowDecimals={false}
+                  fontSize={12}
+                />
+                <Bar
+                  dataKey="count"
+                  fill={driverStats?.teamColors?.primary || COLORS.primary}
+                  radius={[4, 4, 0, 0]}
+                />
+                <ChartTooltip
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      return (
+                        <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                          <p className="font-medium">{label}</p>
+                          <p className="text-muted-foreground">{payload[0].value} finishes</p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+      <Card
+        className="overflow-hidden driver-tile-beam-parent border-transparent bg-transparent py-0"
+        style={{
+          backgroundColor: "#070708",
+          backgroundImage: `linear-gradient(to bottom right, ${vizOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+          backgroundSize: "auto, 12px 12px",
+          backgroundPosition: "center, 0 0",
+          ["--driver-tile-glow" as any]: vizGlow,
+          ["--driver-tile-glow-blur" as any]: "30px",
+        }}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-0 left-0 w-28 h-28 z-[0]"
+          style={{
+            background: `radial-gradient(circle at 0% 0%, ${vizCorner} 0%, rgba(0,0,0,0) 78%)`,
+          }}
+        />
+        <CardHeader className="relative z-[1] pt-4 pb-2">
+          <CardTitle>Qualifying Positions Through Season</CardTitle>
+          <CardDescription>Count of qualifying finishes for each grid position</CardDescription>
+        </CardHeader>
+        <CardContent className="relative z-[1]">
+          <div className="w-full h-[220px] sm:h-[250px] md:h-[280px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={qualifyingPositionsData}
+                margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="position"
+                  tickMargin={8}
+                  padding={{ left: 20, right: 20 }}
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                />
+                <YAxis
+                  hide={false}
+                  mirror={false}
+                  tickMargin={8}
+                  tickLine={false}
+                  axisLine={false}
+                  width={40}
+                  tickCount={6}
+                  domain={[0, "dataMax"]}
+                  allowDecimals={false}
+                  fontSize={12}
+                />
+                <Bar
+                  dataKey="count"
+                  fill={driverStats?.teamColors?.secondary || COLORS.secondary}
+                  radius={[4, 4, 0, 0]}
+                />
+                <ChartTooltip
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      return (
+                        <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                          <p className="font-medium">{label}</p>
+                          <p className="text-muted-foreground">{payload[0].value} qualifying results</p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+      </div>
+      </div>
+    </div>
    );
  }

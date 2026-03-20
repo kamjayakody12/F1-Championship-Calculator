@@ -81,22 +81,36 @@ export function useDriverStandings(seasonId?: string) {
       setTracks(tracksData);
 
       // Process race results
+      // If schedules are missing but we have selected tracks + results, synthesize schedule dates so charts can build.
+      // This mirrors the constructor standings logic and prevents empty progression/distribution charts.
+      const schedulesToUse =
+        (schedules && schedules.length > 0) ? schedules : (selectedTracks || []).map((st: any, idx: number) => ({
+          track: st.id,
+          date: `1970-01-${String(idx + 1).padStart(2, "0")}`,
+        }));
+
       const raceResults = processRaceResults(
         results,
         driverMap,
         teamMap,
         trackMap,
         selectedTrackMap,
-        schedules,
+        schedulesToUse,
         rules
       );
 
       console.log(`Processed ${raceResults.length} race results`);
       console.log(`Unique tracks in results:`, [...new Set(raceResults.map(r => r.track))]);
 
+      // Show only drivers who actually participated in at least one race result.
+      const participatingDriverIds = new Set(raceResults.map((r) => String(r.driver)));
+      const participatingDriversData = (driversData || []).filter((d: any) =>
+        participatingDriverIds.has(String(d.id)) && !!d.team
+      );
+
       // Calculate driver statistics
       const driverStats = calculateDriverStats(
-        driversData,
+        participatingDriversData,
         teamMap,
         raceResults
       );
@@ -108,9 +122,9 @@ export function useDriverStandings(seasonId?: string) {
         distributionData: distData,
         rankingEvolution,
       } = calculateChartData(
-        driversData,
+        participatingDriversData,
         raceResults,
-        schedules,
+        schedulesToUse,
         selectedTrackMap,
         tracksData
       );
@@ -120,7 +134,7 @@ export function useDriverStandings(seasonId?: string) {
       setRankingData(rankingEvolution);
 
       // Set driver standings
-      const enrichedDrivers = enrichDriverData(driversData, teamMap, raceResults);
+      const enrichedDrivers = enrichDriverData(participatingDriversData, teamMap, raceResults);
       setDrivers(enrichedDrivers);
 
       setLoading(false);

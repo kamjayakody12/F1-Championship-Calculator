@@ -25,43 +25,111 @@ export const useConstructorStandings = (seasonId?: string) => {
 
   const fetchData = async () => {
     try {
-      let [
-        { data: drivers },
-        { data: teamsData },
-        { data: results },
-        { data: schedules },
-        { data: tracksData },
-        { data: selectedTracks },
-        { data: rules },
-      ] = await Promise.all([
-        supabase.from('drivers').select('*'),
-        supabase.from('teams').select('*'),
-        (seasonId
-          ? supabase.from('results').select('*').eq('season_id', seasonId)
-          : supabase.from('results').select('*')),
-        (seasonId
-          ? supabase.from('schedules').select('*').eq('season_id', seasonId)
-          : supabase.from('schedules').select('*')),
-        supabase.from('tracks').select('*'),
-        (seasonId
-          ? supabase.from('selected_tracks').select('*, track(*)').eq('season_id', seasonId)
-          : supabase.from('selected_tracks').select('*, track(*)')),
-        supabase.from('rules').select('polegivespoint, fastestlapgivespoint').eq('id', 1).single(),
-      ]);
+      let drivers: any[] = [];
+      let teamsData: any[] = [];
+      let results: any[] = [];
+      let schedules: any[] = [];
+      let selectedTracks: any[] = [];
+      let tracksData: any[] = [];
+      let rules: any = null;
 
-      // Fallback for legacy data: if a season has no scoped race rows yet, use the unscoped datasets.
-      if (seasonId && (results?.length || 0) === 0 && (schedules?.length || 0) === 0 && (selectedTracks?.length || 0) === 0) {
-        const fallback = await Promise.all([
+      if (seasonId) {
+        const [
+          { data: seasonTeams },
+          { data: seasonDrivers },
+          { data: seasonSelectedTracks },
+          { data: seasonSchedules },
+          { data: seasonResults },
+          { data: liveResults },
+          { data: tracks },
+          { data: rulesData },
+        ] = await Promise.all([
+          supabase.from('season_teams').select('*').eq('season_id', seasonId),
+          supabase.from('season_drivers').select('*').eq('season_id', seasonId),
+          supabase.from('season_selected_tracks').select('*').eq('season_id', seasonId),
+          supabase.from('season_schedules').select('selected_track_id, date').eq('season_id', seasonId),
+          supabase.from('season_results').select('*').eq('season_id', seasonId),
+          supabase.from('results').select('*').eq('season_id', seasonId),
+          supabase.from('tracks').select('*'),
+          supabase.from('rules').select('polegivespoint, fastestlapgivespoint').eq('id', 1).single(),
+        ]);
+
+        tracksData = tracks || [];
+        rules = rulesData;
+
+        const trackRowById = new Map((tracksData || []).map((t: any) => [t.id, t]));
+
+        drivers = (seasonDrivers || []).map((d: any) => ({
+          id: d.driver_id,
+          name: d.name,
+          team: d.team_id || '',
+          points: d.points ?? 0,
+        }));
+
+        teamsData = (seasonTeams || []).map((t: any) => ({
+          id: t.team_id,
+          name: t.name,
+          points: t.points ?? 0,
+          logo: t.logo || '',
+        }));
+
+        selectedTracks = (seasonSelectedTracks || []).map((st: any) => {
+          const physicalTrack = trackRowById.get(st.track_id);
+          return {
+            id: st.selected_track_id,
+            type: st.type,
+            track: physicalTrack ? { id: physicalTrack.id, name: physicalTrack.name, img: physicalTrack.img } : null,
+          };
+        });
+
+        schedules = (seasonSchedules || []).map((s: any) => ({
+          track: s.selected_track_id,
+          date: s.date || '',
+        }));
+
+        // Prefer season_results; if none exist yet, fall back to the live season-scoped results.
+        const useSeasonResults = (seasonResults || []).length > 0;
+        results = useSeasonResults
+          ? (seasonResults || []).map((r: any) => ({
+              track: r.selected_track_id,
+              driver: r.driver_id,
+              team_id: r.team_id,
+              finishing_position: r.finishing_position,
+              position: r.finishing_position,
+              pole: r.pole,
+              fastestlap: r.fastestlap,
+              racefinished: r.racefinished,
+            }))
+          : liveResults || [];
+      } else {
+        let [
+          { data: driversData },
+          { data: teamsDataData },
+          { data: resultsData },
+          { data: schedulesData },
+          { data: tracksDataData },
+          { data: selectedTracksData },
+          { data: rulesData },
+        ] = await Promise.all([
+          supabase.from('drivers').select('*'),
+          supabase.from('teams').select('*'),
           supabase.from('results').select('*'),
           supabase.from('schedules').select('*'),
+          supabase.from('tracks').select('*'),
           supabase.from('selected_tracks').select('*, track(*)'),
+          supabase.from('rules').select('polegivespoint, fastestlapgivespoint').eq('id', 1).single(),
         ]);
-        results = fallback[0].data || [];
-        schedules = fallback[1].data || [];
-        selectedTracks = fallback[2].data || [];
+
+        drivers = driversData || [];
+        teamsData = teamsDataData || [];
+        results = resultsData || [];
+        schedules = schedulesData || [];
+        tracksData = tracksDataData || [];
+        selectedTracks = selectedTracksData || [];
+        rules = rulesData;
       }
 
-      if (!drivers || !teamsData || !results || !schedules || !tracksData || !selectedTracks || !rules) {
+      if (!tracksData || !rules || !selectedTracks) {
         throw new Error('Failed to fetch data');
       }
 
@@ -143,6 +211,8 @@ export const useConstructorStandings = (seasonId?: string) => {
         };
       });
 
+      const participatingDriverIds = new Set(raceResults.map((r) => String(r.driver)));
+
       // Calculate team statistics (only for teams with drivers)
       const teamStats = new Map<string, TeamStatsData>();
       teamsWithDrivers.forEach((team) => {
@@ -209,7 +279,8 @@ export const useConstructorStandings = (seasonId?: string) => {
       teamsWithDrivers.forEach((team: any) => teamPointsProgression.set(team.id, {}));
 
       // Build chart data arrays
-      const chartDataArray: ChartDataPoint[] = [];
+      // Track-grouped cumulative points (used for ranking evolution + keep distribution logic stable)
+      const trackChartDataArray: ChartDataPoint[] = [];
       const distributionRows: DistributionDataPoint[] = [];
       let trackIndex = 0;
 
@@ -257,7 +328,7 @@ export const useConstructorStandings = (seasonId?: string) => {
           dataPoint[team.name] = prog[trackIndex] || 0;
         });
 
-        chartDataArray.push(dataPoint);
+        trackChartDataArray.push(dataPoint);
 
         // Distribution data point - points earned at this specific track ONLY
         const distRow: DistributionDataPoint = {
@@ -278,11 +349,13 @@ export const useConstructorStandings = (seasonId?: string) => {
 
 
 
-      setChartData(chartDataArray);
+      // Use the same progression structure as driver standings:
+      // group schedules by physical track (combine sprint + race) and show cumulative points by team.
+      setChartData(trackChartDataArray);
       setDistributionData(distributionRows);
 
       // Calculate ranking evolution
-      const rankingDataArray: ChartDataPoint[] = chartDataArray.map((raceData) => {
+      const rankingDataArray: ChartDataPoint[] = trackChartDataArray.map((raceData) => {
         const raceStandings = teamsWithDrivers
           .map((team) => ({
             teamId: team.id,
@@ -313,7 +386,11 @@ export const useConstructorStandings = (seasonId?: string) => {
         teamPointsMap.set(r.teamId, (teamPointsMap.get(r.teamId) || 0) + (r.points || 0));
       });
       const teamsWithPoints = teamsWithDrivers.map((team) => {
-        const teamDrivers = drivers.filter((driver) => driver.team === team.id);
+        const teamDrivers = drivers.filter(
+          (driver) =>
+            driver.team === team.id &&
+            participatingDriverIds.has(String(driver.id))
+        );
         const constructorPoints = teamPointsMap.get(team.id) || 0;
         return { ...team, constructorPoints, drivers: teamDrivers };
       });

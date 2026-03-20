@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ColumnDef } from "@tanstack/react-table";
-import DataTable from "@/components/data-table";
 import {
   Card,
   CardContent,
@@ -78,69 +76,6 @@ export default function ConstructorStandingsPage() {
     setActiveTeam(activeTeam === teamName ? "all" : teamName);
   };
 
-  // Define table columns
-  const columns: ColumnDef<Team>[] = useMemo(
-    () => [
-      {
-        accessorKey: "position",
-        header: "POS",
-        cell: ({ row }) => (
-          <span className="text-2xl font-bold text-gray-700 dark:text-gray-100">
-            {row.index + 1}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "name",
-        header: "CONSTRUCTOR",
-        cell: ({ row }) => {
-          const isRB = row.original.name === "RB";
-          const isStakeF1 = row.original.name === "Stake F1 Team";
-          const logoSize = isRB || isStakeF1 ? "w-14 h-14" : "w-10 h-10";
-
-          return (
-            <div className="flex items-center justify-center">
-              {row.original.logo ? (
-                <img
-                  src={extractImageUrl(row.original.logo)}
-                  alt={`${row.original.name} logo`}
-                  className={`${logoSize} object-contain bg-black/10 dark:bg-transparent rounded-lg p-1`}
-                />
-              ) : (
-                <span
-                  className={`inline-block ${logoSize} bg-gray-200 dark:bg-muted rounded-full flex-shrink-0`}
-                />
-              )}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "drivers",
-        header: "DRIVERS",
-        cell: ({ row }) => (
-          <div className="space-y-1">
-            {row.original.drivers.map((driver) => (
-              <div key={driver.id} className="text-sm text-gray-600 dark:text-gray-300">
-                {driver.name} ({driver.points || 0} pts)
-              </div>
-            ))}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "constructorPoints",
-        header: "POINTS",
-        cell: ({ row }) => (
-          <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
-            {row.original.constructorPoints}
-          </span>
-        ),
-      },
-    ],
-    []
-  );
-
   // Chart configuration
   const chartConfig: ChartConfig = useMemo(() => {
     const config: ChartConfig = {
@@ -165,6 +100,10 @@ export default function ConstructorStandingsPage() {
     poles: { label: "Pole positions", color: "hsl(285, 100%, 65%)" },
     dnfs: { label: "DNF/DSQ", color: "hsl(5, 100%, 60%)" },
   };
+
+  const progressionHeight = Math.max(300, chartData.length * 56);
+  const distributionHeight = Math.max(240, distributionData.length * 36 + 40);
+  const rankingHeight = Math.max(300, rankingData.length * 56);
 
   const progressionTeams = useMemo(
     () =>
@@ -198,14 +137,59 @@ export default function ConstructorStandingsPage() {
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6 mb-4 sm:mb-6">
         {/* Constructor Standings Table */}
         <div className="xl:col-span-4">
-          <DataTable 
-            columns={columns} 
-            data={teams}
-            onRowClick={(team) => handleTeamClick(team.name)}
-            getRowClassName={(team) => 
-              activeTeam === team.name ? "bg-muted/70" : ""
-            }
-          />
+          <div className="bg-card rounded-2xl border border-border overflow-hidden">
+            <div className="px-4 py-3 grid grid-cols-[56px_1fr_96px] gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide bg-muted/20">
+              <div>POS</div>
+              <div>CONSTRUCTOR</div>
+              <div className="text-right">POINTS</div>
+            </div>
+            <div className="p-2 space-y-2">
+              {teams.map((team: Team, idx: number) => {
+                const colors = getTeamColorVariations(team.name === "Stake F1 Team" ? "Sauber" : team.name);
+                const borderColor = colors.wins;
+                const overlay = borderColor.replace("hsl(", "hsla(").replace(")", ", 0.20)");
+                const logoSrc = extractImageUrl(team.logo || "");
+                const isRB = team.name === "RB" || team.name === "Stake F1 Team";
+                const logoSizeClass = isRB ? "w-9 h-9" : "w-8 h-8";
+                const isActive = activeTeam === team.name;
+
+                return (
+                  <button
+                    key={team.id}
+                    type="button"
+                    onClick={() => handleTeamClick(team.name)}
+                    className={`w-full text-left px-4 py-3 rounded-xl border border-border bg-card/30 flex items-center gap-4 transition ${isActive ? "ring-2 ring-primary/40" : ""}`}
+                    style={{
+                      borderColor,
+                      backgroundImage: `linear-gradient(to bottom right, ${overlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                      backgroundSize: "auto, 12px 12px",
+                      backgroundPosition: "center, 0 0",
+                    }}
+                  >
+                    <div className="w-14 text-sm font-semibold text-foreground text-center">{idx + 1}</div>
+                    <div className="flex-1 min-w-0 flex items-center gap-3">
+                      {logoSrc ? (
+                        <img
+                          src={logoSrc}
+                          alt={`${team.name} logo`}
+                          className={`${logoSizeClass} object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1`}
+                        />
+                      ) : (
+                        <div className={`${logoSizeClass} rounded-full bg-muted/40 flex-shrink-0`} />
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground truncate">{team.name}</div>
+                        <div className="text-xs text-muted-foreground/70 truncate">
+                          {(team.drivers || []).map((d) => d.name).join(" • ")}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="w-24 text-right text-sm font-bold text-foreground">{team.constructorPoints || 0}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Points Progression Chart */}
@@ -225,9 +209,10 @@ export default function ConstructorStandingsPage() {
                   </div>
                 ) : (
                   <ChartContainer
+                    key={`constructor-prog-${chartData.length}`}
                     config={chartConfig}
-                    className="w-full h-full overflow-visible"
-                    style={{ minHeight: 420 }}
+                    className="w-full overflow-visible"
+                    style={{ height: progressionHeight }}
                   >
                     <LineChart
                       accessibilityLayer
@@ -251,6 +236,7 @@ export default function ConstructorStandingsPage() {
                           if (raceData) {
                             const trackName = (raceData.race as string).split(" (")[0];
                             const track = tracks.find((t) => t.name === trackName);
+
                             if (track?.img) {
                               return (
                                 <g transform={`translate(${x},${y})`}>
@@ -269,6 +255,21 @@ export default function ConstructorStandingsPage() {
                                 </g>
                               );
                             }
+
+                            return (
+                              <g transform={`translate(${x},${y})`}>
+                                <text
+                                  x={0}
+                                  y={0}
+                                  dy={12}
+                                  textAnchor="middle"
+                                  fill="#666"
+                                  fontSize={12}
+                                >
+                                  {`Round ${raceData.raceIndex + 1}`}
+                                </text>
+                              </g>
+                            );
                           }
                           return (
                             <g transform={`translate(${x},${y})`}>
@@ -280,7 +281,7 @@ export default function ConstructorStandingsPage() {
                                 fill="#666"
                                 fontSize={12}
                               >
-                                {raceData ? `Round ${raceData.raceIndex + 1}` : payload.value}
+                                {payload.value}
                               </text>
                             </g>
                           );
@@ -370,11 +371,11 @@ export default function ConstructorStandingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0 flex-1 overflow-hidden">
-            <div className="w-full h-full min-h-[450px] px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4 overflow-auto">
+            <div className="w-full h-full px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4 overflow-auto">
               <ChartContainer
                 config={chartConfig}
                 className="w-full"
-                style={{ height: Math.max(400, distributionData.length * 40) }}
+                style={{ height: distributionHeight }}
               >
                 <BarChart
                   accessibilityLayer
@@ -474,10 +475,11 @@ export default function ConstructorStandingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0 flex-1 overflow-hidden">
-            <div className="w-full h-full min-h-[450px] px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4">
+            <div className="w-full h-full px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4">
               <ChartContainer
                 config={chartConfig}
                 className="w-full h-full overflow-visible"
+                style={{ height: rankingHeight }}
               >
                 <LineChart
                   accessibilityLayer
