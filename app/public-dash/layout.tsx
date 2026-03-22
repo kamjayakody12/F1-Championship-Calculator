@@ -33,7 +33,9 @@ export default function AdminLayout({
           <Toaster position="top-center" />
           <KeyboardShortcuts />
           {/* <ShortcutHint /> */}
-          <main className="flex-1 overflow-auto pt-4">{children}</main>
+          <main className="flex-1 overflow-auto pt-2 sm:pt-4 px-2 sm:px-4 lg:px-6 w-full max-w-[1920px] mx-auto">
+            {children}
+          </main>
         </SidebarInset>
       </SidebarProvider>
     </ThemeProvider>
