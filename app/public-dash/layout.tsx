@@ -7,7 +7,6 @@ import { SiteHeader } from "@/components/public-site-header";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
-import { ShortcutHint } from "@/components/shortcut-hint";
 
 export default function AdminLayout({
   children,
@@ -25,7 +24,9 @@ export default function AdminLayout({
         } as React.CSSProperties}
       >
         {/* your off-canvas/fixed sidebar */}
-        <AppSidebar variant="sidebar" />
+        <React.Suspense fallback={null}>
+          <AppSidebar variant="sidebar" />
+        </React.Suspense>
 
         {/* the rest of the page */}
         <SidebarInset className="flex flex-col min-h-screen">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -66,7 +66,7 @@ interface QualifyingResult {
   driver: string;
 }
 
-export default function ResultsPage() {
+function ResultsContent() {
   const searchParams = useSearchParams();
   const seasonId = searchParams.get("seasonId") || "";
   const [selectedTrack, setSelectedTrack] = useState<string>('');
@@ -537,5 +537,13 @@ export default function ResultsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ResultsPage() {
+  return (
+    <Suspense fallback={<div className="p-3 sm:p-4 lg:p-5" />}>
+      <ResultsContent />
+    </Suspense>
   );
 }

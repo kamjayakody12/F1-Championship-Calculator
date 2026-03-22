@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import {
   Card,
   CardContent,
@@ -31,7 +31,7 @@ import { DistributionTooltip } from "./components/DistributionTooltip";
 import { RankingTooltip } from "./components/RankingTooltip";
 import { useSearchParams } from "next/navigation";
 
-export default function DriverStandingsPage() {
+function DriverStandingsContent() {
   // State management
   const [activeDriver, setActiveDriver] = useState<string>("all");
   const [hoveredDistributionDriver, setHoveredDistributionDriver] =
@@ -591,5 +591,13 @@ export default function DriverStandingsPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function DriverStandingsPage() {
+  return (
+    <Suspense fallback={<div className="p-3 sm:p-4 lg:p-5" />}>
+      <DriverStandingsContent />
+    </Suspense>
   );
 }

@@ -3,10 +3,10 @@
 import { SignupForm } from "@/components/signup-form";
 import { EmailConfirmationMessage } from "@/components/email-confirmation-message";
 import { useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { toast } from "sonner";
 
-export default function SignupPage() {
+function SignupContent() {
   const searchParams = useSearchParams();
   const message = searchParams.get("message");
   const redirect = searchParams.get("redirect");
@@ -49,4 +49,12 @@ export default function SignupPage() {
       </div>
     </div>
   );
-} 
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center p-6" />}>
+      <SignupContent />
+    </Suspense>
+  );
+}

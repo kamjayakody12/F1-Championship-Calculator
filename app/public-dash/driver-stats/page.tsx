@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/db";
 import { useSearchParams } from "next/navigation";
 import {
@@ -86,7 +86,7 @@ const COLORS = {
   }
 };
 
-export default function DriverStatsPage() {
+function DriverStatsContent() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [selectedDriver, setSelectedDriver] = useState<string>("");
   const [driverStats, setDriverStats] = useState<DriverStats | null>(null);
@@ -1100,3 +1100,11 @@ export default function DriverStatsPage() {
     </div>
    );
  }
+
+export default function DriverStatsPage() {
+  return (
+    <Suspense fallback={<div className="p-3 sm:p-4 lg:p-5" />}>
+      <DriverStatsContent />
+    </Suspense>
+  );
+}

@@ -42,9 +42,10 @@ function setHslLightness(color: string, lightnessPercent: number): string {
 export default async function DriverTilesPage({
   searchParams,
 }: {
-  searchParams?: { seasonId?: string };
+  searchParams?: Promise<{ seasonId?: string }>;
 }) {
-  const seasonId = searchParams?.seasonId || "";
+  const resolvedSearchParams = await searchParams;
+  const seasonId = resolvedSearchParams?.seasonId || "";
   const [{ data: drivers }, { data: teamsData }, { data: seasonEntries }] = await Promise.all([
     supabase.from("drivers").select("*"),
     supabase.from("teams").select("id, name, logo, carImage"),
