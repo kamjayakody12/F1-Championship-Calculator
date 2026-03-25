@@ -288,9 +288,10 @@ function calculateStandingsEvolution(
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams?: { seasonId?: string };
+  searchParams?: Promise<{ seasonId?: string }>;
 }) {
-  const seasonId = searchParams?.seasonId || "";
+  const resolvedSearchParams = await searchParams;
+  const seasonId = resolvedSearchParams?.seasonId || "";
   // ========================================
   // Fetch all required data from database
   // ========================================

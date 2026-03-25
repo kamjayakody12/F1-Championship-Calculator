@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { supabase } from "@/lib/db";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -46,7 +46,7 @@ interface TeamStats {
   finishPositionsByDriver: { [driverId: string]: { [position: number]: number } };
 }
 
-export default function ConstructorStatsPage() {
+function ConstructorStatsContent() {
   const searchParams = useSearchParams();
   const teamParam = searchParams.get("team") || "";
   const seasonId = searchParams.get("seasonId") || "";
@@ -804,6 +804,14 @@ export default function ConstructorStatsPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function ConstructorStatsPage() {
+  return (
+    <Suspense fallback={<div className="p-3 sm:p-4 lg:p-5" />}>
+      <ConstructorStatsContent />
+    </Suspense>
   );
 }
 

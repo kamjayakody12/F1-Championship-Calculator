@@ -3,10 +3,10 @@
 
 import { LoginForm } from "@/components/login-form";
 import { useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { toast } from "sonner";
 
-export default function AdminLoginPage() {
+function AdminLoginContent() {
   const searchParams = useSearchParams();
   const message = searchParams.get("message");
   const redirect = searchParams.get("redirect");
@@ -31,5 +31,13 @@ export default function AdminLoginPage() {
         <LoginForm />
       </div>
     </div>
+  );
+}
+
+export default function AdminLoginPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center p-6" />}>
+      <AdminLoginContent />
+    </Suspense>
   );
 }

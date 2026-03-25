@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import {
   Card,
   CardContent,
@@ -31,7 +31,7 @@ import { DistributionTooltip } from "./components/DistributionTooltip";
 import { RankingTooltip } from "./components/RankingTooltip";
 import { useSearchParams } from "next/navigation";
 
-export default function ConstructorStandingsPage() {
+function ConstructorStandingsContent() {
   // State management
   const [activeTeam, setActiveTeam] = useState<string>("all");
   const [hoveredDistributionTeam, setHoveredDistributionTeam] = useState<string | null>(null);
@@ -763,5 +763,13 @@ export default function ConstructorStandingsPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function ConstructorStandingsPage() {
+  return (
+    <Suspense fallback={<div className="p-3 sm:p-4 lg:p-5" />}>
+      <ConstructorStandingsContent />
+    </Suspense>
   );
 }

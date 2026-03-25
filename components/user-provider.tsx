@@ -2,19 +2,10 @@
 
 import { createClient } from "@/utils/supabase/client";
 import { useEffect, useState } from "react";
-
-interface User {
-  id: string;
-  email: string;
-  user_metadata?: {
-    first_name?: string;
-    last_name?: string;
-    full_name?: string;
-  };
-}
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 
 export function useUser() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<SupabaseUser | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 

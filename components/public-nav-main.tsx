@@ -1,6 +1,6 @@
 "use client"
 
-import { type LucideIcon } from "lucide-react"
+import { type ComponentType } from "react"
 import { useSearchParams } from "next/navigation"
 
 import {
@@ -24,7 +24,7 @@ export function NavMain({
   items: {
     title: string
     url: string
-    icon?: LucideIcon
+    icon?: ComponentType<{ className?: string }>
     isActive?: boolean
     items?: {
       title: string
