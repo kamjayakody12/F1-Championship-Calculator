@@ -18,7 +18,7 @@ export default function AdminLayout({
   return (
     <AuthGuard>
       {/* wrap everything in the ThemeProvider */}
-      <ThemeProvider attribute="class" defaultTheme="system">
+      <ThemeProvider>
         {/* Provide the sidebar context (offcanvas on mobile, fixed on desktop) */}
         <SidebarProvider
           style={{
