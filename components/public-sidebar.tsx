@@ -23,7 +23,6 @@ import {
 } from "lucide-react"
 
 import { NavMain } from "@/components/public-nav-main"
-import { PublicSeasonSelector } from "@/components/public-season-selector"
 import { TeamSwitcher } from "@/components/team-switcher"
 import {
   Sidebar,
@@ -104,7 +103,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <PublicSeasonSelector />
         <NavMain items={data.navMain} />
       </SidebarContent>
       <SidebarRail />

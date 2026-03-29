@@ -648,17 +648,14 @@ export default async function HomePage({
       {isSeasonFinalized && driverChampion && constructorChampion ? (
         <section className="mb-4 sm:mb-6">
           <h2 className="text-2xl font-semibold mb-4">Season Champions</h2>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <div
-              className="rounded-2xl border border-border p-4 relative overflow-hidden w-full"
+              className="rounded-2xl border border-white/15 bg-card/20 p-4 relative overflow-hidden w-full f1-card-glow"
               style={{
-                borderColor: driverChampionColors.wins,
-                backgroundImage: `linear-gradient(to bottom right, ${toAlphaHsl(
+                ["--f1-card-glow-color" as string]: toAlphaHsl(
                   driverChampionColors.podiums,
-                  0.24
-                )} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
-                backgroundSize: "auto, 12px 12px",
-                backgroundPosition: "center, 0 0",
+                  0.55
+                ),
               }}
             >
               <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Drivers Champion</div>
@@ -691,15 +688,12 @@ export default async function HomePage({
             </div>
 
             <div
-              className="rounded-2xl border border-border p-4 relative overflow-hidden w-full"
+              className="rounded-2xl border border-white/15 bg-card/20 p-4 relative overflow-hidden w-full f1-card-glow"
               style={{
-                borderColor: constructorChampionColors.wins,
-                backgroundImage: `linear-gradient(to bottom right, ${toAlphaHsl(
+                ["--f1-card-glow-color" as string]: toAlphaHsl(
                   constructorChampionColors.podiums,
-                  0.24
-                )} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
-                backgroundSize: "auto, 12px 12px",
-                backgroundPosition: "center, 0 0",
+                  0.55
+                ),
               }}
             >
               <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Constructors Champion</div>
@@ -768,7 +762,7 @@ export default async function HomePage({
           <section>
             <h2 className="text-2xl font-semibold mb-4">Last Race Podium</h2>
             <div>
-              <div className="p-4 sm:p-6 flex items-center justify-between gap-4">
+              <div className="flex items-center justify-between gap-4">
                 <div className="flex-1">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {[0, 1, 2].map((i) => {
@@ -776,76 +770,95 @@ export default async function HomePage({
                       const rank = i + 1;
                       const tileBorder = entry?.teamColorPrimary || "hsl(0, 0%, 50%)";
                       const tileOverlay = entry?.teamColorSecondary
-                        ? toAlphaHsl(entry.teamColorSecondary, 0.25)
+                        ? toAlphaHsl(entry.teamColorSecondary, 0.45)
                         : "rgba(0,0,0,0)";
 
+                      const pillBg = entry
+                        ? `linear-gradient(to right, ${toAlphaHsl(
+                            entry.teamColorPrimary || tileBorder,
+                            0.45
+                          )} 0%, ${toAlphaHsl(
+                            entry.teamColorSecondary || entry.teamColorPrimary || tileBorder,
+                            0.45
+                          )} 100%)`
+                        : "rgba(20,20,20,0.55)";
+
+                      const hasTileOverlay = tileOverlay && tileOverlay !== "rgba(0,0,0,0)";
+
                       return (
-                  <div
+                        <div
                           key={`podium-${rank}`}
-                    className="relative rounded-2xl border border-border overflow-hidden min-h-[160px] flex flex-col justify-between"
-                          style={{
-                            borderColor: tileBorder,
-                            backgroundImage: `linear-gradient(to bottom right, ${tileOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
-                            backgroundSize: "auto, 12px 12px",
-                            backgroundPosition: "center, 0 0",
-                          }}
+                          className={`relative rounded-2xl border border-white/15 bg-card/10 overflow-hidden min-h-[170px] flex flex-col justify-center ${hasTileOverlay ? "f1-card-glow" : ""}`}
+                          style={
+                            hasTileOverlay
+                              ? {
+                                  ["--f1-card-glow-color" as string]: tileOverlay,
+                                }
+                              : undefined
+                          }
                         >
-                    <div className="relative flex-1 pt-4 px-5">
-                      {entry ? (
-                        <>
-                          {/* Driver photo */}
-                          {entry.driverImageUrl ? (
-                            <img
-                              src={entry.driverImageUrl}
-                              alt={`${entry.driverName} photo`}
-                              className="w-24 h-24 object-contain bg-black/10 dark:bg-transparent"
-                              style={{
-                                WebkitMaskImage:
-                                  "radial-gradient(110% 90% at 50% 60%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 82%)",
-                                maskImage:
-                                  "radial-gradient(110% 90% at 50% 60%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 82%)",
-                              }}
-                            />
-                          ) : (
-                            <div className="w-24 h-24 bg-muted/40" />
-                          )}
+                          <div className="relative flex items-center justify-between px-5 pt-4 pb-7">
+                            {entry ? (
+                              <>
+                                {/* Driver photo */}
+                                {entry.driverImageUrl ? (
+                                  <img
+                                    src={entry.driverImageUrl}
+                                    alt={`${entry.driverName} photo`}
+                                    className="w-32 h-32 sm:w-36 sm:h-36 object-contain bg-black/10 dark:bg-transparent"
+                                    style={{
+                                      WebkitMaskImage:
+                                        "radial-gradient(110% 90% at 30% 60%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 82%)",
+                                      maskImage:
+                                        "radial-gradient(110% 90% at 30% 60%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 82%)",
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="w-24 h-24 bg-muted/40" />
+                                )}
 
-                          {/* Team logo overlay (top-right) */}
-                          {entry.teamLogoUrl ? (
-                            <img
-                              src={entry.teamLogoUrl}
-                              alt={`${entry.teamName} logo`}
-                              className="absolute top-2 right-2 w-11 h-11 rounded-lg object-contain bg-black/10 dark:bg-transparent"
-                            />
-                          ) : null}
-                        </>
-                      ) : null}
-                    </div>
+                                {/* P-position badge in card top-right (where logo was) */}
+                                <div className="absolute right-6 top-4 sm:top-5 px-3 py-1 rounded-full bg-black/40 text-white text-sm sm:text-base md:text-lg font-bold tracking-wide">
+                                  P{rank}
+                                </div>
 
-                    {/* Bottom info bar */}
-                    <div
-                      className="relative pb-4 px-5"
-                      style={{
-                        background:
-                          "linear-gradient(to top, rgba(11,11,12,0.96) 0%, rgba(11,11,12,0.75) 35%, rgba(11,11,12,0.0) 100%)",
-                      }}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                            {entry?.driverCode || "—"}
+                                {/* Bottom pill info bar */}
+                                <div className="absolute inset-x-6 bottom-5">
+                                  <div
+                                    className="flex items-center justify-between gap-4 rounded-full px-6 py-2 text-[11px] sm:text-sm font-semibold text-white shadow-[0_0_22px_rgba(0,0,0,0.75)] border border-white/18"
+                                    style={{
+                                      background: pillBg,
+                                      backdropFilter: "blur(10px)",
+                                      WebkitBackdropFilter: "blur(10px)",
+                                    }}
+                                  >
+                                    <div className="min-w-0 text-left flex-1">
+                                      <div className="uppercase tracking-wide">
+                                        {entry.driverCode || "—"}
+                                      </div>
+                                      <div className="text-[10px] sm:text-xs font-normal text-white/80 truncate">
+                                        {entry.driverName}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center justify-center flex-[1.2]">
+                                      {entry.teamLogoUrl ? (
+                                        <img
+                                          src={entry.teamLogoUrl}
+                                          alt={`${entry.teamName} logo`}
+                                          className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
+                                        />
+                                      ) : null}
+                                    </div>
+                                    <div className="flex items-center justify-end text-[10px] sm:text-xs text-right whitespace-nowrap flex-1">
+                                      <span className="uppercase truncate max-w-[7rem] sm:max-w-[8rem]">
+                                        {entry.teamName}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </>
+                            ) : null}
                           </div>
-                        </div>
-
-                        <div className="text-base font-bold text-foreground tracking-wide">
-                          P{rank}
-                        </div>
-
-                        <div className="w-10 text-right text-[11px] font-semibold text-muted-foreground">
-                          {rank === 1 ? "Leader" : ""}
-                        </div>
-                      </div>
-                    </div>
                         </div>
                       );
                     })}
@@ -906,8 +919,6 @@ export default async function HomePage({
                 const normalizedTeamName =
                   teamNameRaw === "Stake F1 Team" ? "Sauber" : teamNameRaw;
                 const teamColors = getTeamColorVariations(normalizedTeamName);
-                const borderColor = toAlphaHsl(teamColors.wins, 0.55);
-                const tileOverlay = toAlphaHsl(teamColors.podiums, 0.2);
 
                 const logoSrc = extractImageUrl(driver.teams?.logo || "");
                 const isRB = driver.teams?.name === "RB" || driver.teams?.name === "Stake F1 Team";
@@ -916,12 +927,9 @@ export default async function HomePage({
                 return (
                   <div
                     key={driver.id}
-                    className="px-4 py-3 rounded-xl border border-border bg-card/30 flex items-center gap-4 transition"
+                    className="px-4 py-3 rounded-xl border border-white/15 bg-card/20 flex items-center gap-4 transition f1-card-glow"
                     style={{
-                      borderColor,
-                      backgroundImage: `linear-gradient(to bottom right, ${tileOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
-                      backgroundSize: "auto, 12px 12px",
-                      backgroundPosition: "center, 0 0",
+                      ["--f1-card-glow-color" as string]: toAlphaHsl(teamColors.podiums, 0.5),
                     }}
                   >
                     <div className="w-14 text-sm font-semibold text-foreground text-center">
@@ -999,8 +1007,6 @@ export default async function HomePage({
                 const normalizedTeamName =
                   team.name === "Stake F1 Team" ? "Sauber" : team.name;
                 const teamColors = getTeamColorVariations(normalizedTeamName);
-                const borderColor = toAlphaHsl(teamColors.wins, 0.55);
-                const tileOverlay = toAlphaHsl(teamColors.podiums, 0.2);
 
                 const logoSrc = extractImageUrl(team.logo || "");
                 const logoSizeClass = team.name === "RB" || team.name === "Stake F1 Team" ? "w-9 h-9" : "w-8 h-8";
@@ -1008,12 +1014,9 @@ export default async function HomePage({
                 return (
                   <div
                     key={team.id}
-                    className="px-4 py-3 rounded-xl border border-border bg-card/30 flex items-center gap-4 transition"
+                    className="px-4 py-3 rounded-xl border border-white/15 bg-card/20 flex items-center gap-4 transition f1-card-glow"
                     style={{
-                      borderColor,
-                      backgroundImage: `linear-gradient(to bottom right, ${tileOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
-                      backgroundSize: "auto, 12px 12px",
-                      backgroundPosition: "center, 0 0",
+                      ["--f1-card-glow-color" as string]: toAlphaHsl(teamColors.podiums, 0.5),
                     }}
                   >
                     <div className="w-14 text-sm font-semibold text-foreground text-center">

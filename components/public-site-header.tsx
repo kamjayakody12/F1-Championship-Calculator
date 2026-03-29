@@ -4,6 +4,7 @@ import * as React from "react"
 import { usePathname } from "next/navigation"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PublicSeasonSelector } from "@/components/public-season-selector"
 
 // map each admin route to its header title
 const titleMap: Record<string, string> = {
@@ -29,7 +30,9 @@ export function SiteHeader() {
           className="mx-2 data-[orientation=vertical]:h-4"
         />
         <h1 className="text-base font-medium">{title}</h1>
-        <div className="ml-auto" />
+        <div className="ml-auto flex items-center gap-4">
+          <PublicSeasonSelector variant="header" />
+        </div>
       </div>
     </header>
   )

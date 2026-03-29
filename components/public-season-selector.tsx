@@ -9,7 +9,16 @@ type Season = {
   season_number: number;
 };
 
-export function PublicSeasonSelector() {
+type PublicSeasonSelectorProps = {
+  /**
+   * Controls layout/styling depending on where the selector is used.
+   * - "sidebar": stacked label + select (default)
+   * - "header": compact inline control for the top header
+   */
+  variant?: "sidebar" | "header";
+};
+
+export function PublicSeasonSelector({ variant = "sidebar" }: PublicSeasonSelectorProps) {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
   const pathname = usePathname();
@@ -44,6 +53,31 @@ export function PublicSeasonSelector() {
     router.push(`${pathname}?${params.toString()}`);
   }
 
+  if (variant === "header") {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium text-muted-foreground">Season</span>
+        <Select
+          value={effectiveSeasonId}
+          onValueChange={onChangeSeason}
+          disabled={loading || seasons.length === 0}
+        >
+          <SelectTrigger className="h-8 w-[120px] rounded-full bg-muted/40 border-border text-xs">
+            <SelectValue placeholder={loading ? "Loading..." : "Select season"} />
+          </SelectTrigger>
+          <SelectContent>
+            {seasons.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                Season {s.season_number}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  }
+
+  // Sidebar layout (default)
   return (
     <div className="px-2 py-2">
       <div className="mb-2 text-xs text-muted-foreground">Season</div>

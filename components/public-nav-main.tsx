@@ -1,6 +1,7 @@
 "use client"
 
 import { type ComponentType } from "react"
+import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 
 import {
@@ -53,19 +54,19 @@ export function NavMain({
           >
             <SidebarMenuItem>
               <SidebarMenuButton tooltip={item.title} asChild>
-                <a href={withSeasonParam(item.url)}>
+                <Link href={withSeasonParam(item.url)}>
                   {item.icon && <item.icon />}
                   <span>{item.title}</span>
-                </a>
+                </Link>
               </SidebarMenuButton>
               <CollapsibleContent>
                 <SidebarMenuSub>
                   {item.items?.map((subItem) => (
                     <SidebarMenuSubItem key={subItem.title}>
                       <SidebarMenuSubButton asChild>
-                        <a href={withSeasonParam(subItem.url)}>
+                        <Link href={withSeasonParam(subItem.url)}>
                           <span>{subItem.title}</span>
-                        </a>
+                        </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
                   ))}
