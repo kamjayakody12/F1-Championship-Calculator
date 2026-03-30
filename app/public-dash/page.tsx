@@ -601,6 +601,8 @@ export default async function HomePage({
     });
   })();
 
+  const lastRaceTrackName = lastRaceWeekend?.track?.name || lastRaceWeekend?.track?.trackName || "";
+
   // ========================================
   // Next race + countdown target
   // ========================================
@@ -760,35 +762,66 @@ export default async function HomePage({
       <div className="space-y-4 sm:space-y-6">
           {/* ==================== LAST RACE PODIUM ==================== */}
           <section>
-            <h2 className="text-2xl font-semibold mb-4">Last Race Podium</h2>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-2xl font-semibold">Last Race</h3>
+                  {lastRaceWeekend?.track?.img ? (
+                    <span
+                      className="inline-flex items-center justify-center w-8 h-5 [&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full [&>img]:object-contain"
+                      dangerouslySetInnerHTML={{ __html: lastRaceWeekend.track.img }}
+                    />
+                  ) : null}
+                </div>
+                {lastRaceTrackName ? (
+                  <h4 className="text-sm font-medium text-muted-foreground">
+                    {lastRaceTrackName}
+                  </h4>
+                ) : null}
+              </div>
+            </div>
             <div>
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex-1">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {[0, 1, 2].map((i) => {
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end">
+                {[0, 1, 2].map((i) => {
                       const entry = podium[i];
                       const rank = i + 1;
+                      const desktopOrderClass =
+                        rank === 1 ? "sm:order-2" : rank === 2 ? "sm:order-1" : "sm:order-3";
+                      const cardHeightClass =
+                        rank === 1
+                          ? "min-h-[210px] sm:min-h-[320px]"
+                          : rank === 2
+                            ? "min-h-[210px] sm:min-h-[284px]"
+                            : "min-h-[210px] sm:min-h-[245px]";
+                      const contentHeightClass =
+                        rank === 1
+                          ? "min-h-[210px] sm:min-h-[320px]"
+                          : rank === 2
+                            ? "min-h-[210px] sm:min-h-[284px]"
+                            : "min-h-[210px] sm:min-h-[245px]";
+                      const gapValue =
+                        rank === 1 ? "1.23.076" : rank === 2 ? "+2.345" : "+5.845";
+                      const rankNumber = rank === 1 ? "1" : rank === 2 ? "2" : "3";
+                      const rankSuffix = rank === 1 ? "st" : rank === 2 ? "nd" : "rd";
+                      const rankColor =
+                        rank === 1 ? "#FFD700" : rank === 2 ? "#d8dde3" : "#cd7f32";
+                      const driverImageClass =
+                        rank === 1
+                          ? "absolute -left-10 -bottom-14 w-80 h-80 sm:w-[22rem] sm:h-[22rem] object-contain bg-black/10 dark:bg-transparent"
+                          : rank === 2
+                            ? "absolute -left-7 -bottom-10 w-64 h-64 sm:w-[17.5rem] sm:h-[17.5rem] object-contain bg-black/10 dark:bg-transparent"
+                            : "absolute -left-6 -bottom-7 w-[13.5rem] h-[13.5rem] sm:w-[14.5rem] sm:h-[14.5rem] object-contain bg-black/10 dark:bg-transparent";
                       const tileBorder = entry?.teamColorPrimary || "hsl(0, 0%, 50%)";
                       const tileOverlay = entry?.teamColorSecondary
                         ? toAlphaHsl(entry.teamColorSecondary, 0.45)
                         : "rgba(0,0,0,0)";
-
-                      const pillBg = entry
-                        ? `linear-gradient(to right, ${toAlphaHsl(
-                            entry.teamColorPrimary || tileBorder,
-                            0.45
-                          )} 0%, ${toAlphaHsl(
-                            entry.teamColorSecondary || entry.teamColorPrimary || tileBorder,
-                            0.45
-                          )} 100%)`
-                        : "rgba(20,20,20,0.55)";
 
                       const hasTileOverlay = tileOverlay && tileOverlay !== "rgba(0,0,0,0)";
 
                       return (
                         <div
                           key={`podium-${rank}`}
-                          className={`relative rounded-2xl border border-white/15 bg-card/10 overflow-hidden min-h-[170px] flex flex-col justify-center ${hasTileOverlay ? "f1-card-glow" : ""}`}
+                          className={`relative self-end rounded-2xl border border-white/15 bg-card/10 overflow-hidden flex flex-col justify-center ${desktopOrderClass} ${cardHeightClass} ${hasTileOverlay ? "f1-card-glow" : ""}`}
                           style={
                             hasTileOverlay
                               ? {
@@ -797,7 +830,7 @@ export default async function HomePage({
                               : undefined
                           }
                         >
-                          <div className="relative flex items-center justify-between px-5 pt-4 pb-7">
+                          <div className={`relative ${contentHeightClass} pt-4 pb-7`}>
                             {entry ? (
                               <>
                                 {/* Driver photo */}
@@ -805,55 +838,67 @@ export default async function HomePage({
                                   <img
                                     src={entry.driverImageUrl}
                                     alt={`${entry.driverName} photo`}
-                                    className="w-32 h-32 sm:w-36 sm:h-36 object-contain bg-black/10 dark:bg-transparent"
+                                    className={driverImageClass}
                                     style={{
+                                      // Keep shoulders crisp but fade the lower body so it blends into the pill
                                       WebkitMaskImage:
-                                        "radial-gradient(110% 90% at 30% 60%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 82%)",
+                                        "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 90%)",
                                       maskImage:
-                                        "radial-gradient(110% 90% at 30% 60%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 82%)",
+                                        "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 90%)",
                                     }}
                                   />
                                 ) : (
-                                  <div className="w-24 h-24 bg-muted/40" />
+                                  <div className="absolute -left-6 bottom-0 w-24 h-24 bg-muted/40" />
                                 )}
 
-                                {/* P-position badge in card top-right (where logo was) */}
-                                <div className="absolute right-6 top-4 sm:top-5 px-3 py-1 rounded-full bg-black/40 text-white text-sm sm:text-base md:text-lg font-bold tracking-wide">
-                                  P{rank}
+                                {/* Position badge in card top-right */}
+                                <div
+                                  className="absolute right-6 top-4 sm:top-5 text-2xl sm:text-3xl md:text-4xl leading-none"
+                                  style={{
+                                    color: rankColor,
+                                    fontFamily: "'Racing Sans One', 'Impact', 'Arial Black', sans-serif",
+                                    fontStyle: "italic",
+                                    fontWeight: 900,
+                                    letterSpacing: "-0.04em",
+                                    transform: "skewX(-10deg)",
+                                    WebkitTextStroke: "2.4px rgba(0,0,0,0.95)",
+                                    textShadow:
+                                      "0 1px 0 rgba(255,255,255,0.25), 2px 2px 0 rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.45)",
+                                  }}
+                                >
+                                  <span className="inline-flex items-start leading-none">
+                                    <span>{rankNumber}</span>
+                                    <sup
+                                      className="ml-2.5 text-[0.42em] leading-none relative top-[0.02em]"
+                                      style={{
+                                        WebkitTextStroke: "0px transparent",
+                                        textShadow: "none",
+                                      }}
+                                    >
+                                      {rankSuffix}
+                                    </sup>
+                                  </span>
                                 </div>
 
-                                {/* Bottom pill info bar */}
-                                <div className="absolute inset-x-6 bottom-5">
-                                  <div
-                                    className="flex items-center justify-between gap-4 rounded-full px-6 py-2 text-[11px] sm:text-sm font-semibold text-white shadow-[0_0_22px_rgba(0,0,0,0.75)] border border-white/18"
-                                    style={{
-                                      background: pillBg,
-                                      backdropFilter: "blur(10px)",
-                                      WebkitBackdropFilter: "blur(10px)",
-                                    }}
-                                  >
-                                    <div className="min-w-0 text-left flex-1">
-                                      <div className="uppercase tracking-wide">
-                                        {entry.driverCode || "—"}
-                                      </div>
-                                      <div className="text-[10px] sm:text-xs font-normal text-white/80 truncate">
-                                        {entry.driverName}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center justify-center flex-[1.2]">
-                                      {entry.teamLogoUrl ? (
-                                        <img
-                                          src={entry.teamLogoUrl}
-                                          alt={`${entry.teamName} logo`}
-                                          className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
-                                        />
-                                      ) : null}
-                                    </div>
-                                    <div className="flex items-center justify-end text-[10px] sm:text-xs text-right whitespace-nowrap flex-1">
-                                      <span className="uppercase truncate max-w-[7rem] sm:max-w-[8rem]">
-                                        {entry.teamName}
-                                      </span>
-                                    </div>
+                                {/* Team name + logo in card top-left (no pill background) */}
+                                <div className="absolute left-6 top-4 sm:top-5 flex items-center gap-2 text-white text-sm sm:text-base md:text-lg font-semibold tracking-wide">
+                                  {entry.teamLogoUrl ? (
+                                    <img
+                                      src={entry.teamLogoUrl}
+                                      alt={`${entry.teamName} logo`}
+                                      className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 object-contain"
+                                    />
+                                  ) : null}
+                                  <span>{entry.teamName}</span>
+                                </div>
+
+                                {/* Driver abbreviation bottom-right, aligned with P badge x-axis */}
+                                <div className="absolute right-6 bottom-5 text-right text-white">
+                                  <div className="text-lg sm:text-xl font-extrabold uppercase tracking-wide leading-none">
+                                    {entry.driverCode || "—"}
+                                  </div>
+                                  <div className="mt-1 text-sm sm:text-base font-mono font-semibold tabular-nums text-white/75 tracking-normal leading-none">
+                                    {gapValue}
                                   </div>
                                 </div>
                               </>
@@ -862,37 +907,10 @@ export default async function HomePage({
                         </div>
                       );
                     })}
-                  </div>
-                </div>
-
-                <div className="w-[110px] flex items-center justify-center">
-                  {lastRaceWeekend?.track?.img ? (
-                    <div
-                      className="rounded-xl bg-black/10 dark:bg-transparent border border-border w-full flex items-center justify-center"
-                      style={{ height: 92 }}
-                    >
-                      <div
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          display: "flex",
-                          justifyContent: "center",
-                          alignItems: "center",
-                          padding: 8,
-                        }}
-                        dangerouslySetInnerHTML={{
-                          __html: lastRaceWeekend.track.img,
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">No flag</div>
-                  )}
-                </div>
               </div>
-
-              {/* Intentionally no footer copy under the podium tiles. */}
             </div>
+
+            {/* Intentionally no footer copy under the podium tiles. */}
           </section>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">

@@ -200,11 +200,13 @@
   filter: drop-shadow(0 0 26px var(--driver-team-logo-glow, rgba(255, 255, 255, 0.5)));
 }
 
-/* Reusable internal card glow (no bright border reflection) */
+/* Reusable internal card glow (clip colour inside border area) */
 .f1-card-glow {
   background-image: radial-gradient(
     circle at top left,
     var(--f1-card-glow-color, rgba(255, 255, 255, 0.12)) 0%,
     transparent 60%
   );
+  /* Ensure the background does not paint under the border */
+  background-clip: padding-box;
 }
