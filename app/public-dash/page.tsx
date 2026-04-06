@@ -291,7 +291,20 @@ export default async function HomePage({
   searchParams?: Promise<{ seasonId?: string }>;
 }) {
   const resolvedSearchParams = await searchParams;
-  const seasonId = resolvedSearchParams?.seasonId || "";
+  let seasonId = resolvedSearchParams?.seasonId || "";
+
+  let latestSeasonRow: { id: string; season_number: number; is_finalized: boolean } | null = null;
+  if (!seasonId) {
+    const { data } = await supabase
+      .from("seasons")
+      .select("id, season_number, is_finalized")
+      .order("season_number", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    latestSeasonRow = data ?? null;
+    seasonId = latestSeasonRow?.id || "";
+  }
   // ========================================
   // Fetch all required data from database
   // ========================================
@@ -329,18 +342,13 @@ export default async function HomePage({
     .eq('id', 1)
     .single();
 
-  const { data: seasonRow } = await (seasonId
-    ? supabase
+  const { data: seasonRow } = latestSeasonRow
+    ? { data: latestSeasonRow }
+    : await supabase
         .from("seasons")
         .select("id, season_number, is_finalized")
         .eq("id", seasonId)
-        .maybeSingle()
-    : supabase
-        .from("seasons")
-        .select("id, season_number, is_finalized")
-        .order("season_number", { ascending: false })
-        .limit(1)
-        .maybeSingle());
+        .maybeSingle();
 
   // Handle errors
   if (driversError || teamsError) {

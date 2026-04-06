@@ -47,6 +47,14 @@ export function PublicSeasonSelector({ variant = "sidebar" }: PublicSeasonSelect
     return seasons[0]?.id || "";
   }, [selectedSeasonId, seasons]);
 
+  useEffect(() => {
+    if (loading || selectedSeasonId || !seasons[0]?.id) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("seasonId", seasons[0].id);
+    router.replace(`${pathname}?${params.toString()}`);
+  }, [loading, pathname, router, searchParams, seasons, selectedSeasonId]);
+
   function onChangeSeason(nextSeasonId: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("seasonId", nextSeasonId);
