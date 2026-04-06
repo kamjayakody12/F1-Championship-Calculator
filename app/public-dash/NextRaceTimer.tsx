@@ -53,7 +53,7 @@ export default function NextRaceTimer({
 
   return (
     <div className="bg-card/60 border border-border rounded-3xl px-6 py-4 flex items-center gap-4">
-      <div className="w-14 h-14 rounded-2xl border border-border bg-black/10 flex items-center justify-center overflow-hidden">
+      <div className="w-14 h-14 rounded-2xl border border-transparent bg-transparent flex items-center justify-center overflow-hidden shadow-none">
         {flagHtml ? (
           <div
             className="w-full h-full flex items-center justify-center"

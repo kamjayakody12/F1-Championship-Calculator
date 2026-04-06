@@ -123,9 +123,6 @@ function DriverStandingsContent() {
               {drivers.map((driver: DriverRow, idx: number) => {
                 const lineColor = TEAM_COLOR_MAP[driver.teamName] || "hsl(0, 0%, 55%)";
                 const overlay = lineColor.replace("hsl(", "hsla(").replace(")", ", 0.20)");
-                const isRB = driver.teamName === "RB" || driver.teamName === "Stake F1 Team";
-                const logoSizeClass = isRB ? "w-9 h-9" : "w-8 h-8";
-
                 return (
                   <div
                     key={driver.id}
@@ -139,15 +136,18 @@ function DriverStandingsContent() {
                   >
                     <div className="w-14 text-sm font-semibold text-foreground text-center">{idx + 1}</div>
                     <div className="flex-1 min-w-0 flex items-center gap-3">
-                      {driver.teamLogo ? (
-                        <img
-                          src={driver.teamLogo}
-                          alt={`${driver.teamName} logo`}
-                          className={`${logoSizeClass} object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1`}
-                        />
-                      ) : (
-                        <div className={`${logoSizeClass} rounded-full bg-muted/40 flex-shrink-0`} />
-                      )}
+                      <div className="w-9 h-9 flex-shrink-0 overflow-hidden">
+                        {driver.teamLogo ? (
+                          <img
+                            src={driver.teamLogo}
+                            alt={`${driver.teamName} logo`}
+                            style={{ width: 36, height: 36, objectFit: 'contain', display: 'block' }}
+                            className="rounded-lg p-1"
+                          />
+                        ) : (
+                          <div className="w-full h-full rounded-full bg-muted/40" />
+                        )}
+                      </div>
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-foreground truncate">{driver.name}</div>
                         <div className="text-xs text-muted-foreground/70 truncate">{driver.teamName}</div>
@@ -336,12 +336,12 @@ function DriverStandingsContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0 flex-1 overflow-hidden">
-            <div className="w-full h-full px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4 overflow-auto">
+            <div className="w-full h-full flex flex-col px-4 pt-4 pb-2 sm:px-6 sm:pt-6 sm:pb-4">
               <ChartContainer
                 key={`driver-dist-${distributionData.length}`}
                 config={chartConfig}
-                className="w-full"
-                style={{ height: distributionHeight }}
+                className="w-full flex-1 overflow-visible"
+                style={{ minHeight: distributionHeight }}
               >
                 <BarChart
                   accessibilityLayer

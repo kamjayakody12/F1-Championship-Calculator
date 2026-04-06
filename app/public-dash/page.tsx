@@ -633,6 +633,7 @@ export default async function HomePage({
         targetMs: schMs,
         trackName: st.track?.name || st.track?.trackName || "",
         flagHtml: st.track?.img || null,
+        background: st.track?.background || null,
       };
     }
 
@@ -644,8 +645,44 @@ export default async function HomePage({
   // Render the standings tables
   // ========================================
 
+  const rawBg = !isSeasonFinalized ? (nextRace?.background || null) : null;
+  // background may be stored as an HTML string (like img/logo fields) — extract the src URL
+  const nextBg = rawBg ? (extractImageUrl(rawBg) || rawBg) : null;
+  if (rawBg) console.log('[Hero] raw background value:', rawBg, '→ resolved:', nextBg);
+
   return (
-    <div className="p-3 sm:p-4 md:p-8">
+    <div>
+      {/* ── Hero banner (next race background) ── */}
+      {/* Negative margins cancel the layout's pt + px so the image bleeds edge-to-edge */}
+      {nextBg ? (
+        <div className="relative overflow-hidden -mt-2 sm:-mt-4 -mx-2 sm:-mx-4 lg:-mx-6 h-[260px] sm:h-[340px] md:h-[420px]">
+          <img
+            src={nextBg}
+            alt="Next race background"
+            className="absolute inset-0 w-full h-full object-cover object-center"
+          />
+          {/* Bottom fade into page bg */}
+          <div
+            className="absolute bottom-0 left-0 right-0 h-2/3 pointer-events-none"
+            style={{
+              background:
+                "linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--background) 60%, transparent) 60%, var(--background) 100%)",
+            }}
+          />
+          {/* NextRaceTimer pill – bottom-right of the hero */}
+          {!isSeasonFinalized ? (
+            <div className="absolute bottom-5 right-4 sm:right-6 md:right-8">
+              <NextRaceTimer
+                targetMs={nextRace?.targetMs ?? null}
+                trackName={nextRace?.trackName}
+                flagHtml={nextRace?.flagHtml}
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="p-3 sm:p-4 md:p-8">
       {isSeasonFinalized ? <SeasonConfetti /> : null}
       {isSeasonFinalized && driverChampion && constructorChampion ? (
         <section className="mb-4 sm:mb-6">
@@ -750,7 +787,7 @@ export default async function HomePage({
           </div>
         </section>
       ) : null}
-      {!isSeasonFinalized ? (
+      {!isSeasonFinalized && !nextBg ? (
         <div className="flex justify-end mb-4">
           <NextRaceTimer
             targetMs={nextRace?.targetMs ?? null}
@@ -853,26 +890,27 @@ export default async function HomePage({
 
                                 {/* Position badge in card top-right */}
                                 <div
-                                  className="absolute right-6 top-4 sm:top-5 text-2xl sm:text-3xl md:text-4xl leading-none"
+                                  className="absolute right-5 top-3 sm:right-6 sm:top-5 text-3xl sm:text-4xl md:text-5xl leading-none"
                                   style={{
                                     color: rankColor,
                                     fontFamily: "'Racing Sans One', 'Impact', 'Arial Black', sans-serif",
                                     fontStyle: "italic",
                                     fontWeight: 900,
-                                    letterSpacing: "-0.04em",
+                                    letterSpacing: "-0.055em",
                                     transform: "skewX(-10deg)",
-                                    WebkitTextStroke: "2.4px rgba(0,0,0,0.95)",
+                                    WebkitTextStroke: "2.8px rgba(0,0,0,0.98)",
                                     textShadow:
-                                      "0 1px 0 rgba(255,255,255,0.25), 2px 2px 0 rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.45)",
+                                      "0 1px 0 rgba(255,255,255,0.35), 3px 3px 0 rgba(0,0,0,0.95), 0 0 10px rgba(0,0,0,0.55)",
                                   }}
                                 >
-                                  <span className="inline-flex items-start leading-none">
-                                    <span>{rankNumber}</span>
+                                  <span className="inline-flex items-start gap-2 leading-none">
+                                    <span className="font-black">{rankNumber}</span>
                                     <sup
-                                      className="ml-2.5 text-[0.42em] leading-none relative top-[0.02em]"
+                                      className="text-[0.5em] font-black leading-none relative top-[0.1em]"
                                       style={{
-                                        WebkitTextStroke: "0px transparent",
-                                        textShadow: "none",
+                                        WebkitTextStroke: "1.35px rgba(0,0,0,0.98)",
+                                        textShadow:
+                                          "0 1px 0 rgba(255,255,255,0.25), 1px 1px 0 rgba(0,0,0,0.9), 0 0 5px rgba(0,0,0,0.35)",
                                       }}
                                     >
                                       {rankSuffix}
@@ -939,8 +977,6 @@ export default async function HomePage({
                 const teamColors = getTeamColorVariations(normalizedTeamName);
 
                 const logoSrc = extractImageUrl(driver.teams?.logo || "");
-                const isRB = driver.teams?.name === "RB" || driver.teams?.name === "Stake F1 Team";
-                const logoSizeClass = isRB ? "w-9 h-9" : "w-8 h-8";
 
                 return (
                   <div
@@ -955,15 +991,18 @@ export default async function HomePage({
                     </div>
 
                     <div className="flex-1 min-w-0 flex items-center gap-3">
-                      {logoSrc ? (
-                        <img
-                          src={logoSrc}
-                          alt={`${teamNameRaw} logo`}
-                          className={`${logoSizeClass} object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1`}
-                        />
-                      ) : (
-                        <div className={`${logoSizeClass} rounded-full bg-muted/40 flex-shrink-0`} />
-                      )}
+                      <div className="w-9 h-9 flex-shrink-0 overflow-hidden">
+                        {logoSrc ? (
+                          <img
+                            src={logoSrc}
+                            alt={`${teamNameRaw} logo`}
+                            style={{ width: 36, height: 36, objectFit: 'contain', display: 'block' }}
+                            className="rounded-lg p-1"
+                          />
+                        ) : (
+                          <div className="w-full h-full rounded-full bg-muted/40" />
+                        )}
+                      </div>
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-foreground truncate">
                           {driver.name}
@@ -1027,7 +1066,6 @@ export default async function HomePage({
                 const teamColors = getTeamColorVariations(normalizedTeamName);
 
                 const logoSrc = extractImageUrl(team.logo || "");
-                const logoSizeClass = team.name === "RB" || team.name === "Stake F1 Team" ? "w-9 h-9" : "w-8 h-8";
 
                 return (
                   <div
@@ -1042,15 +1080,18 @@ export default async function HomePage({
                     </div>
 
                     <div className="flex-1 min-w-0 flex items-center gap-3">
-                      {logoSrc ? (
-                        <img
-                          src={logoSrc}
-                          alt={`${team.name} logo`}
-                          className={`${logoSizeClass} object-contain flex-shrink-0 bg-black/10 dark:bg-transparent rounded-lg p-1`}
-                        />
-                      ) : (
-                        <div className={`${logoSizeClass} rounded-full bg-muted/40 flex-shrink-0`} />
-                      )}
+                      <div className="w-9 h-9 flex-shrink-0 overflow-hidden">
+                        {logoSrc ? (
+                          <img
+                            src={logoSrc}
+                            alt={`${team.name} logo`}
+                            style={{ width: 36, height: 36, objectFit: 'contain', display: 'block' }}
+                            className="rounded-lg p-1"
+                          />
+                        ) : (
+                          <div className="w-full h-full rounded-full bg-muted/40" />
+                        )}
+                      </div>
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-foreground truncate">
                           {team.name}
@@ -1084,9 +1125,10 @@ export default async function HomePage({
             </div>
           </div>
         </section>
-        </div>
+        </div>{/* end grid xl:grid-cols-2 */}
+      </div>{/* end space-y-4 */}
 
-      </div>
+      </div>{/* end p-3 */}
     </div>
   );
 }

@@ -1,6 +1,14 @@
 import { ChartConfig } from '@/components/ui/chart';
 import { Track } from '../hooks/types';
 
+const brightenColor = (hslColor: string) => {
+  const hslMatch = hslColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+  if (!hslMatch) return hslColor;
+
+  const [, h, s, l] = hslMatch.map(Number);
+  return `hsl(${h}, ${Math.min(s + 10, 100)}%, ${Math.min(l + 18, 85)}%)`;
+};
+
 interface DistributionTooltipProps {
   active?: boolean;
   payload?: any[];
@@ -14,31 +22,66 @@ export const DistributionTooltip = ({
   active,
   payload,
   label,
+  tracks,
   chartConfig,
   hoveredTeam,
 }: DistributionTooltipProps) => {
   if (!active || !payload || !payload.length) return null;
 
-  const entries = hoveredTeam
-    ? payload.filter((p: any) => p.dataKey === hoveredTeam)
-    : [payload.find((p: any) => typeof p.value === 'number' && p.value > 0) || payload[0]];
+  const trackName = label as string;
+  const track = tracks.find((t) => t.name === trackName);
+
+  if (hoveredTeam) {
+    const entry = payload.find((p: any) => p.dataKey === hoveredTeam);
+    if (!entry) return null;
+
+    const teamName = entry.dataKey as string;
+    const color = chartConfig[teamName]?.color || entry.color;
+    const brightColor = brightenColor(color);
+
+    return (
+      <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+        <div className="flex items-center gap-2 mb-2">
+          {track?.img && (
+            <div
+              className="w-6 h-4 flex items-center justify-center"
+              dangerouslySetInnerHTML={{ __html: track.img }}
+            />
+          )}
+          <p className="font-medium text-sm">{trackName}</p>
+        </div>
+        <p className="text-xs text-muted-foreground mb-2">Points earned at this weekend</p>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="font-medium">{teamName}</span>
+            <span className="ml-auto" style={{ color: brightColor }}>
+              {entry.value} pts
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  let totalPoints = 0;
+  payload.forEach((entry: any) => {
+    if (typeof entry.value === 'number') {
+      totalPoints += entry.value;
+    }
+  });
 
   return (
     <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-      <p className="font-medium text-sm mb-2">{label}</p>
-      <p className="text-xs text-muted-foreground mb-2">Points earned at this track</p>
-      <div className="space-y-1">
-        {entries.filter(Boolean).map((entry: any, idx: number) => {
-          const name = entry.dataKey as string;
-          const color = chartConfig[name]?.color || entry.color;
-          return (
-            <div key={`${name}-${idx}`} className="flex items-center gap-2 text-sm">
-              <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
-              <span>{name}</span>
-              <span className="ml-auto font-medium">{entry.value} pts</span>
-            </div>
-          );
-        })}
+      <p className="text-xs text-muted-foreground mb-2">Total points</p>
+      <div className="flex items-center gap-2">
+        {track?.img && (
+          <div
+            className="w-6 h-4 flex items-center justify-center"
+            dangerouslySetInnerHTML={{ __html: track.img }}
+          />
+        )}
+        <p className="font-medium text-sm">{trackName}</p>
+        <span className="ml-auto text-muted-foreground">{totalPoints} pts</span>
       </div>
     </div>
   );
