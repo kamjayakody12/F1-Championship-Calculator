@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/db';
 import { Result } from '@/models/Result';
 import { IconTrophy, IconFlag, IconClock } from '@tabler/icons-react';
+import { usePublicSeasonId } from '@/hooks/use-public-season-id';
 // Helper function to extract image URL from HTML string
 function extractImageUrl(htmlString: string): string {
   if (!htmlString) return '';
@@ -67,8 +68,7 @@ interface QualifyingResult {
 }
 
 function ResultsContent() {
-  const searchParams = useSearchParams();
-  const seasonId = searchParams.get("seasonId") || "";
+  const seasonId = usePublicSeasonId();
   const [selectedTrack, setSelectedTrack] = useState<string>('');
   const [tracks, setTracks] = useState<Track[]>([]);
   const [results, setResults] = useState<ExtendedResult[]>([]);

@@ -30,6 +30,7 @@ import { ProgressionTooltip } from "./components/ProgressionTooltip";
 import { DistributionTooltip } from "./components/DistributionTooltip";
 import { RankingTooltip } from "./components/RankingTooltip";
 import { useSearchParams } from "next/navigation";
+import { usePublicSeasonId } from "@/hooks/use-public-season-id";
 
 function DriverStandingsContent() {
   // State management
@@ -44,7 +45,7 @@ function DriverStandingsContent() {
 
   // Fetch data
   const searchParams = useSearchParams();
-  const seasonId = searchParams.get("seasonId") || undefined;
+  const seasonId = usePublicSeasonId() || undefined;
   const {
     drivers,
     chartData,

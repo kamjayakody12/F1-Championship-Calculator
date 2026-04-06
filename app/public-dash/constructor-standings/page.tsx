@@ -30,6 +30,7 @@ import { ProgressionTooltip } from "./components/ProgressionTooltip";
 import { DistributionTooltip } from "./components/DistributionTooltip";
 import { RankingTooltip } from "./components/RankingTooltip";
 import { useSearchParams } from "next/navigation";
+import { usePublicSeasonId } from "@/hooks/use-public-season-id";
 
 function ConstructorStandingsContent() {
   // State management
@@ -38,9 +39,9 @@ function ConstructorStandingsContent() {
   const [hoveredProgressionTeam, setHoveredProgressionTeam] = useState<string | null>(null);
   const [hoveredRankingTeam, setHoveredRankingTeam] = useState<string | null>(null);
   const searchParams = useSearchParams();
+  const seasonId = usePublicSeasonId() || undefined;
 
   // Fetch data
-  const seasonId = searchParams.get("seasonId") || undefined;
   const {
     teams,
     chartData,

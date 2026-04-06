@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { extractImageUrl, getTeamColorVariations } from "../constructor-standings/hooks/constants";
 import { IconMedal, IconTarget, IconTrophy } from "@tabler/icons-react";
+import { usePublicSeasonId } from "@/hooks/use-public-season-id";
 
 interface Team {
   id: string;
@@ -49,7 +50,7 @@ interface TeamStats {
 function ConstructorStatsContent() {
   const searchParams = useSearchParams();
   const teamParam = searchParams.get("team") || "";
-  const seasonId = searchParams.get("seasonId") || "";
+  const seasonId = usePublicSeasonId();
 
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string>("");

@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/db";
 import { useSearchParams } from "next/navigation";
+import { usePublicSeasonId } from "@/hooks/use-public-season-id";
 import {
   Card,
   CardContent,
@@ -95,7 +96,7 @@ function DriverStatsContent() {
 
   const searchParams = useSearchParams();
   const urlDriverId = useMemo(() => searchParams.get("driverId"), [searchParams]);
-  const urlSeasonId = useMemo(() => searchParams.get("seasonId"), [searchParams]);
+  const urlSeasonId = usePublicSeasonId();
 
   useEffect(() => {
     fetchData();

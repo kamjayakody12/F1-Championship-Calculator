@@ -1,5 +1,7 @@
 import { supabase } from "@/lib/db";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { PUBLIC_SEASON_COOKIE_NAME } from "@/lib/public-season";
 
 function extractImageUrl(htmlString: string): string {
   if (!htmlString) return "";
@@ -45,7 +47,11 @@ export default async function DriverTilesPage({
   searchParams?: Promise<{ seasonId?: string }>;
 }) {
   const resolvedSearchParams = await searchParams;
-  const seasonId = resolvedSearchParams?.seasonId || "";
+  const cookieStore = await cookies();
+  const seasonId =
+    resolvedSearchParams?.seasonId ||
+    cookieStore.get(PUBLIC_SEASON_COOKIE_NAME)?.value ||
+    "";
   const [{ data: drivers }, { data: teamsData }, { data: seasonEntries }] = await Promise.all([
     supabase.from("drivers").select("*"),
     supabase.from("teams").select("id, name, logo, carImage"),

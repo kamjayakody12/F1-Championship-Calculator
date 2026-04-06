@@ -2,7 +2,6 @@
 
 import { type ComponentType } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
 
 import {
   Collapsible,
@@ -33,15 +32,6 @@ export function NavMain({
     }[]
   }[]
 }) {
-  const searchParams = useSearchParams()
-  const seasonId = searchParams.get("seasonId")
-
-  const withSeasonParam = (url: string) => {
-    if (!seasonId) return url
-    const separator = url.includes("?") ? "&" : "?"
-    return `${url}${separator}seasonId=${encodeURIComponent(seasonId)}`
-  }
-
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Menu</SidebarGroupLabel>
@@ -54,7 +44,7 @@ export function NavMain({
           >
             <SidebarMenuItem>
               <SidebarMenuButton tooltip={item.title} asChild>
-                <Link href={withSeasonParam(item.url)}>
+                <Link href={item.url}>
                   {item.icon && <item.icon />}
                   <span>{item.title}</span>
                 </Link>
@@ -64,7 +54,7 @@ export function NavMain({
                   {item.items?.map((subItem) => (
                     <SidebarMenuSubItem key={subItem.title}>
                       <SidebarMenuSubButton asChild>
-                        <Link href={withSeasonParam(subItem.url)}>
+                        <Link href={subItem.url}>
                           <span>{subItem.title}</span>
                         </Link>
                       </SidebarMenuSubButton>

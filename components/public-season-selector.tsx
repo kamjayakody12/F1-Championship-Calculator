@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { persistPublicSeasonId, usePublicSeasonId } from "@/hooks/use-public-season-id";
 
 type Season = {
   id: string;
@@ -21,11 +22,8 @@ type PublicSeasonSelectorProps = {
 export function PublicSeasonSelector({ variant = "sidebar" }: PublicSeasonSelectorProps) {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
-  const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const selectedSeasonId = searchParams.get("seasonId") || "";
+  const selectedSeasonId = usePublicSeasonId();
 
   useEffect(() => {
     async function load() {
@@ -49,16 +47,12 @@ export function PublicSeasonSelector({ variant = "sidebar" }: PublicSeasonSelect
 
   useEffect(() => {
     if (loading || selectedSeasonId || !seasons[0]?.id) return;
-
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("seasonId", seasons[0].id);
-    router.replace(`${pathname}?${params.toString()}`);
-  }, [loading, pathname, router, searchParams, seasons, selectedSeasonId]);
+    persistPublicSeasonId(seasons[0].id);
+  }, [loading, seasons, selectedSeasonId]);
 
   function onChangeSeason(nextSeasonId: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("seasonId", nextSeasonId);
-    router.push(`${pathname}?${params.toString()}`);
+    persistPublicSeasonId(nextSeasonId);
+    router.refresh();
   }
 
   if (variant === "header") {

@@ -3,6 +3,8 @@ import { supabase } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { ArrowUp, ArrowDown } from "lucide-react";
 import { JSX } from "react";
+import { cookies } from "next/headers";
+import { PUBLIC_SEASON_COOKIE_NAME } from "@/lib/public-season";
 import { getTeamColorVariations } from "./constructor-standings/hooks/constants";
 import NextRaceTimer from "./NextRaceTimer";
 import SeasonConfetti from "./SeasonConfetti";
@@ -291,7 +293,11 @@ export default async function HomePage({
   searchParams?: Promise<{ seasonId?: string }>;
 }) {
   const resolvedSearchParams = await searchParams;
-  let seasonId = resolvedSearchParams?.seasonId || "";
+  const cookieStore = await cookies();
+  let seasonId =
+    resolvedSearchParams?.seasonId ||
+    cookieStore.get(PUBLIC_SEASON_COOKIE_NAME)?.value ||
+    "";
 
   let latestSeasonRow: { id: string; season_number: number; is_finalized: boolean } | null = null;
   if (!seasonId) {
