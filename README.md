@@ -1,5 +1,4 @@
-# <img width="1024" height="1024" alt="Copilot_20260409_195618" src="https://github.com/user-attachments/assets/eb44f7fa-c065-45d4-bcd3-a129ee71f0d5" />
- F1 Championship Manager
+# F1 Championship Manager
 
 A full-stack Formula 1 Championship management system for tracking race results, driver & constructor standings, and managing multi-season championships. Features a public-facing dashboard for viewers and a protected admin panel for championship organizers.
 
