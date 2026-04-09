@@ -48,7 +48,7 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
+  --background: #000000;
   --foreground: oklch(0.147 0.004 49.25);
   --card: oklch(0.985 0.001 106.423);
   --card-foreground: oklch(0.147 0.004 49.25);
@@ -82,7 +82,7 @@
 }
 
 .dark {
-  --background: #0a0202;
+  --background: #000000;
   --foreground: oklch(0.985 0.001 106.423);
   --card: oklch(0.216 0.006 56.043);
   --card-foreground: oklch(0.985 0.001 106.423);
@@ -154,7 +154,7 @@
   animation: none;
   transform: translate(-10%, -10%) scale(1.04);
   opacity: 1;
-  filter: drop-shadow(0 0 26px var(--driver-team-logo-glow, rgba(255, 255, 255, 0.5)));
+  filter: drop-shadow(0 0 40px var(--driver-team-logo-glow, rgba(255, 255, 255, 0.8)));
 }
 
 .driver-tile-beam-parent:hover .driver-number-beam,
@@ -195,9 +195,9 @@
 
 .team-row-beam-parent:has(.team-zone-middle:hover) .driver-team-logo-beam {
   animation: none;
-  transform: scale(1.14);
+  transform: scale(1.18);
   opacity: 1;
-  filter: drop-shadow(0 0 26px var(--driver-team-logo-glow, rgba(255, 255, 255, 0.5)));
+  filter: drop-shadow(0 0 40px var(--driver-team-logo-glow, rgba(255, 255, 255, )));
 }
 
 /* Reusable internal card glow (clip colour inside border area) */
@@ -209,4 +209,12 @@
   );
   /* Ensure the background does not paint under the border */
   background-clip: padding-box;
+}
+
+/* Public dashboard test mode: keep tiles/charts transparent over global background image */
+.public-dash-transparent [class*="bg-card"],
+.public-dash-transparent [class*="bg-muted"],
+.public-dash-transparent .recharts-cartesian-grid,
+.public-dash-transparent .recharts-wrapper {
+  background-color: transparent !important;
 }

@@ -272,6 +272,15 @@ function ResultsContent() {
   const raceWinner = results?.find((r: ExtendedResult) => r.position === 1);
   const poleSitter = results?.find((r: ExtendedResult) => r.pole);
   const fastestLapDriver = results?.find((r: ExtendedResult) => r.fastestlap);
+  const getTeamShadeStyle = (teamColor?: string) => {
+    const color = teamColor || "#282828";
+    return {
+      borderColor: `${color}AA`,
+      backgroundColor: "rgba(10, 10, 12, 0.9)",
+      backgroundImage: `linear-gradient(135deg, ${color}52 0%, ${color}22 38%, rgba(0,0,0,0) 82%), radial-gradient(circle at 16% 18%, ${color}45 0%, rgba(0,0,0,0) 58%)`,
+      boxShadow: `inset 0 0 0 1px ${color}55, inset 0 0 32px ${color}2E, 0 0 16px ${color}1F`,
+    };
+  };
 
   return (
     <div className="p-3 sm:p-4 md:p-8 space-y-4 sm:space-y-6 md:space-y-8">
@@ -310,7 +319,10 @@ function ResultsContent() {
       {results && results.length > 0 && !loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 items-stretch animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
           {/* Race Winner Card */}
-          <Card className="min-h-[120px] flex flex-col">
+          <Card
+            className="min-h-[120px] flex flex-col border"
+            style={getTeamShadeStyle(raceWinner?.teamDetails?.color)}
+          >
             <CardHeader className="pb-2 min-h-[88px] flex-1">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -354,7 +366,10 @@ function ResultsContent() {
           </Card>
 
           {/* Pole Position Card */}
-          <Card className="min-h-[120px] flex flex-col">
+          <Card
+            className="min-h-[120px] flex flex-col border"
+            style={getTeamShadeStyle(poleSitter?.teamDetails?.color)}
+          >
             <CardHeader className="pb-2 min-h-[88px] flex-1">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -398,7 +413,10 @@ function ResultsContent() {
           </Card>
 
           {/* Fastest Lap Card */}
-          <Card className="min-h-[120px] flex flex-col">
+          <Card
+            className="min-h-[120px] flex flex-col border"
+            style={getTeamShadeStyle(fastestLapDriver?.teamDetails?.color)}
+          >
             <CardHeader className="pb-2 min-h-[88px] flex-1">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -486,10 +504,11 @@ function ResultsContent() {
                       className="px-4 py-3 rounded-xl border flex items-center gap-3"
                       style={{
                         borderColor: `${teamColor}DD`,
-                        backgroundImage: `linear-gradient(to bottom right, ${teamColor}44 0%, rgba(0,0,0,0) 58%), radial-gradient(${teamColor}22 1px, transparent 1px), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
-                        backgroundSize: "auto, 12px 12px",
-                        backgroundPosition: "center, 0 0",
-                        boxShadow: `inset 0 0 0 1px ${teamColor}55, 0 0 22px ${teamColor}33`,
+                        backgroundColor: "rgba(9, 9, 11, 0.92)",
+                        backgroundImage: `linear-gradient(135deg, ${teamColor}70 0%, ${teamColor}30 40%, rgba(0,0,0,0) 86%), radial-gradient(circle at 14% 18%, ${teamColor}55 0%, rgba(0,0,0,0) 60%), radial-gradient(${teamColor}38 1px, transparent 1px), radial-gradient(rgba(255,255,255,0.08) 1px, transparent 1px)`,
+                        backgroundSize: "auto, auto, 10px 10px",
+                        backgroundPosition: "center, center, 0 0",
+                        boxShadow: `inset 0 0 0 1px ${teamColor}70, inset 0 0 44px ${teamColor}2E, 0 0 30px ${teamColor}44`,
                       }}
                     >
                       <div className="w-14 text-sm font-semibold text-foreground text-center">{row.position}</div>

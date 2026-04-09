@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowUp, ArrowDown } from "lucide-react";
 import { JSX } from "react";
 import { cookies } from "next/headers";
+import { unstable_noStore as noStore } from "next/cache";
 import { PUBLIC_SEASON_COOKIE_NAME } from "@/lib/public-season";
 import { getTeamColorVariations } from "./constructor-standings/hooks/constants";
 import NextRaceTimer from "./NextRaceTimer";
@@ -50,6 +51,25 @@ function getImageSrc(raw: unknown): string {
   if (!raw) return "";
   const str = String(raw);
   return extractImageUrl(str) || str;
+}
+
+function getMediaSrc(raw: unknown): string {
+  if (!raw) return "";
+  const str = String(raw).trim();
+  if (!str || str === "null" || str === "undefined") return "";
+  return extractImageUrl(str) || str;
+}
+
+function isLikelyVideoUrl(url: string): boolean {
+  if (!url) return false;
+  const clean = url.split("?")[0].toLowerCase();
+  return (
+    clean.endsWith(".mp4") ||
+    clean.endsWith(".webm") ||
+    clean.endsWith(".ogg") ||
+    clean.endsWith(".mov") ||
+    clean.includes("/driver-celebrations/")
+  );
 }
 
 function toAlphaHsl(hsl: string, alpha: number): string {
@@ -292,6 +312,8 @@ export default async function HomePage({
 }: {
   searchParams?: Promise<{ seasonId?: string }>;
 }) {
+  noStore();
+
   const resolvedSearchParams = await searchParams;
   const cookieStore = await cookies();
   let seasonId =
@@ -377,6 +399,7 @@ export default async function HomePage({
   );
 
   const selectedTrackMap = new Map((selectedTracks || []).map((st: any) => [String(st.id), st]));
+  const teamById = new Map((teamsData || []).map((t: any) => [String(t.id), t]));
   const driverPointsMap = new Map<string, number>();
   const constructorPointsMap = new Map<string, number>();
 
@@ -389,8 +412,8 @@ export default async function HomePage({
     driverPointsMap.set(driverId, (driverPointsMap.get(driverId) || 0) + points);
 
     const resolvedTeamId =
-      r.team_id ||
       (seasonId ? seasonTeamByDriverId.get(driverId) : null) ||
+      r.team_id ||
       (drivers || []).find((d: any) => String(d.id) === driverId)?.team ||
       null;
     if (resolvedTeamId) {
@@ -405,9 +428,17 @@ export default async function HomePage({
       const resolvedTeamId = seasonId
         ? (seasonTeamByDriverId.get(String(d.id)) ?? null)
         : (d.team || null);
+      const resolvedTeam = resolvedTeamId ? teamById.get(String(resolvedTeamId)) : null;
       return {
         ...d,
         team: resolvedTeamId,
+        teams: resolvedTeam
+          ? {
+              name: resolvedTeam.name,
+              logo: resolvedTeam.logo,
+              carImage: resolvedTeam.carImage,
+            }
+          : d.teams,
         points: driverPointsMap.get(String(d.id)) || 0,
       };
     })
@@ -506,7 +537,6 @@ export default async function HomePage({
     if (physicalId) selectedTrackByPhysicalId.set(String(physicalId), st);
   });
 
-  const teamById = new Map((teamsData || []).map((t: any) => [String(t.id), t]));
   const driverById = new Map((participatingDrivers || []).map((d: any) => [d.id, d]));
 
   const nowMs = Date.now();
@@ -570,8 +600,8 @@ export default async function HomePage({
         return {
           driverId: r.driver,
           teamId:
-            r.team_id ||
             (seasonId ? seasonTeamByDriverId.get(String(r.driver)) : null) ||
+            r.team_id ||
             null,
           position: Number.isFinite(posNum) ? posNum : Infinity,
         };
@@ -606,6 +636,13 @@ export default async function HomePage({
       return {
         driverName: driver?.name || String(row.driverId),
         driverImageUrl: getImageSrc(driver?.image ?? driver?.carImage ?? ""),
+        // Optional celebration clip from drivers table (supports either field naming).
+        driverVideoUrl: getMediaSrc(
+          (driver as any)?.celebration_video ??
+            (driver as any)?.celebrationVideo ??
+            (driver as any)?.video ??
+            ""
+        ),
         teamName: teamNameRaw,
         teamLogoUrl,
         driverCode,
@@ -840,16 +877,16 @@ export default async function HomePage({
                         rank === 1 ? "sm:order-2" : rank === 2 ? "sm:order-1" : "sm:order-3";
                       const cardHeightClass =
                         rank === 1
-                          ? "min-h-[210px] sm:min-h-[320px]"
+                          ? "min-h-[260px] sm:min-h-[400px]"
                           : rank === 2
-                            ? "min-h-[210px] sm:min-h-[284px]"
-                            : "min-h-[210px] sm:min-h-[245px]";
+                            ? "min-h-[240px] sm:min-h-[330px]"
+                            : "min-h-[230px] sm:min-h-[300px]";
                       const contentHeightClass =
                         rank === 1
-                          ? "min-h-[210px] sm:min-h-[320px]"
+                          ? "min-h-[260px] sm:min-h-[400px]"
                           : rank === 2
-                            ? "min-h-[210px] sm:min-h-[284px]"
-                            : "min-h-[210px] sm:min-h-[245px]";
+                            ? "min-h-[240px] sm:min-h-[330px]"
+                            : "min-h-[230px] sm:min-h-[300px]";
                       const gapValue =
                         rank === 1 ? "1.23.076" : rank === 2 ? "+2.345" : "+5.845";
                       const rankNumber = rank === 1 ? "1" : rank === 2 ? "2" : "3";
@@ -858,32 +895,37 @@ export default async function HomePage({
                         rank === 1 ? "#FFD700" : rank === 2 ? "#d8dde3" : "#cd7f32";
                       const driverImageClass =
                         rank === 1
-                          ? "absolute -left-10 -bottom-14 w-80 h-80 sm:w-[22rem] sm:h-[22rem] object-contain bg-black/10 dark:bg-transparent"
+                          ? "absolute left-1/2 top-[62%] -translate-x-1/2 -translate-y-1/2 w-80 h-80 sm:w-[22rem] sm:h-[22rem] object-contain bg-black/10 dark:bg-transparent"
                           : rank === 2
-                            ? "absolute -left-7 -bottom-10 w-64 h-64 sm:w-[17.5rem] sm:h-[17.5rem] object-contain bg-black/10 dark:bg-transparent"
-                            : "absolute -left-6 -bottom-7 w-[13.5rem] h-[13.5rem] sm:w-[14.5rem] sm:h-[14.5rem] object-contain bg-black/10 dark:bg-transparent";
+                            ? "absolute left-1/2 top-[60%] -translate-x-1/2 -translate-y-1/2 w-[17rem] h-[17rem] sm:w-[20rem] sm:h-[20rem] object-contain bg-black/10 dark:bg-transparent"
+                            : "absolute left-1/2 top-[60%] -translate-x-1/2 -translate-y-1/2 w-[16rem] h-[16rem] sm:w-[18rem] sm:h-[18rem] object-contain bg-black/10 dark:bg-transparent";
                       const tileBorder = entry?.teamColorPrimary || "hsl(0, 0%, 50%)";
+                      const mediaMask =
+                        "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 58%, rgba(0,0,0,0) 92%)";
+                      const mediaFilter =
+                        rank === 1
+                          ? "drop-shadow(0 16px 26px rgba(0,0,0,0.65)) saturate(1.08) contrast(1.05)"
+                          : "drop-shadow(0 12px 20px rgba(0,0,0,0.58)) saturate(1.04) contrast(1.03)";
                       const tileOverlay = entry?.teamColorSecondary
-                        ? toAlphaHsl(entry.teamColorSecondary, 0.45)
-                        : "rgba(0,0,0,0)";
-
-                      const hasTileOverlay = tileOverlay && tileOverlay !== "rgba(0,0,0,0)";
-
+                        ? toAlphaHsl(entry.teamColorSecondary, rank === 1 ? 0.22 : 0.16)
+                        : "rgba(255,255,255,0.08)";
                       return (
                         <div
                           key={`podium-${rank}`}
-                          className={`relative self-end rounded-2xl border border-white/15 bg-card/10 overflow-hidden flex flex-col justify-center ${desktopOrderClass} ${cardHeightClass} ${hasTileOverlay ? "f1-card-glow" : ""}`}
-                          style={
-                            hasTileOverlay
-                              ? {
-                                  ["--f1-card-glow-color" as string]: tileOverlay,
-                                }
-                              : undefined
-                          }
+                          className={`relative self-end rounded-2xl border border-white/15 bg-card/10 overflow-hidden flex flex-col justify-center ${desktopOrderClass} ${cardHeightClass}`}
+                          style={{ borderColor: tileBorder }}
                         >
                           <div className={`relative ${contentHeightClass} pt-4 pb-7`}>
                             {entry ? (
                               <>
+                                {/* Soft inner shade for better media blending */}
+                                <div
+                                  aria-hidden
+                                  className="pointer-events-none absolute inset-0"
+                                  style={{
+                                    backgroundImage: `radial-gradient(circle at 20% 14%, ${tileOverlay} 0%, rgba(0,0,0,0) 62%), linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.08) 38%, rgba(0,0,0,0.16) 100%)`,
+                                  }}
+                                />
                                 {/* Driver photo */}
                                 {entry.driverImageUrl ? (
                                   <img
@@ -891,16 +933,23 @@ export default async function HomePage({
                                     alt={`${entry.driverName} photo`}
                                     className={driverImageClass}
                                     style={{
-                                      // Keep shoulders crisp but fade the lower body so it blends into the pill
-                                      WebkitMaskImage:
-                                        "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 90%)",
-                                      maskImage:
-                                        "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 90%)",
+                                      // Keep shoulders crisp but fade the lower body so it blends into the tile.
+                                      WebkitMaskImage: mediaMask,
+                                      maskImage: mediaMask,
+                                      filter: mediaFilter,
                                     }}
                                   />
                                 ) : (
                                   <div className="absolute -left-6 bottom-0 w-24 h-24 bg-muted/40" />
                                 )}
+                                {/* Subtle edge vignette for a more cinematic tile */}
+                                <div
+                                  aria-hidden
+                                  className="pointer-events-none absolute inset-0"
+                                  style={{
+                                    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.03), inset 0 -70px 80px rgba(0,0,0,0.42)",
+                                  }}
+                                />
 
                                 {/* Position badge in card top-right */}
                                 <div

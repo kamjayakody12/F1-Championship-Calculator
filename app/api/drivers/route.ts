@@ -20,6 +20,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "@/utils/supabase/server";
+import { adminSupabase } from "@/utils/supabase/admin";
 import { apiCache, withCacheControlHeaders, CACHE_DURATIONS, CACHE_PRESETS } from "@/lib/cache";
 
 /**
@@ -90,6 +91,48 @@ async function checkDriverNumberTaken(supabase: any, driverNumber: number, exclu
   return null; // Number is available
 }
 
+async function getLatestActiveSeasonId(supabase: any): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("seasons")
+    .select("id")
+    .eq("is_finalized", false)
+    .order("season_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data?.id || null;
+}
+
+async function saveCelebrationVideoUrl(
+  supabase: any,
+  driverId: string,
+  celebrationVideo?: string | null
+) {
+  if (celebrationVideo === undefined) return;
+
+  const candidates = ["celebration_video", "video"];
+  let lastError: any = null;
+
+  for (const column of candidates) {
+    const { error } = await supabase
+      .from("drivers")
+      .update({ [column]: celebrationVideo || null })
+      .eq("id", driverId);
+
+    if (!error) return;
+    lastError = error;
+  }
+
+  throw new Error(
+    lastError?.message ||
+      "Failed to save celebration video. Add drivers.celebration_video (run scripts/add_driver_celebration_video.sql)."
+  );
+}
+
 /**
  * GET /api/drivers
  * 
@@ -142,7 +185,7 @@ export async function GET() {
  * The created driver object
  */
 export async function POST(request: Request) {
-  const { name, driver_number, teamId, image } = await request.json();
+  const { name, driver_number, teamId, image, celebrationVideo } = await request.json();
   const supabase = await createServerSupabase();
   
   // Validation 1: Check for duplicate driver number
@@ -169,6 +212,37 @@ export async function POST(request: Request) {
   ]).select().single();
   
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  try {
+    await saveCelebrationVideoUrl(supabase, data.id, celebrationVideo);
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || "Failed to save celebration video" }, { status: 500 });
+  }
+
+  // Mirror new driver assignment into active season so season views stay in sync.
+  try {
+    const activeSeasonId = await getLatestActiveSeasonId(supabase);
+    if (activeSeasonId && data?.id) {
+      const { error: seasonEntryError } = await adminSupabase
+        .from("season_driver_entries")
+        .upsert(
+          [
+            {
+              season_id: activeSeasonId,
+              driver_id: data.id,
+              team_id: teamId || null,
+              is_active: true,
+            },
+          ],
+          { onConflict: "season_id,driver_id" }
+        );
+      if (seasonEntryError) {
+        return NextResponse.json({ error: seasonEntryError.message }, { status: 500 });
+      }
+    }
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || "Failed to sync season driver entry" }, { status: 500 });
+  }
   
   // Invalidate cache so next GET fetches fresh data
   apiCache.del('drivers:list');
@@ -199,7 +273,7 @@ export async function POST(request: Request) {
  * The updated driver object
  */
 export async function PUT(request: Request) {
-  const { driverId, name, driver_number, points, teamId, image } = await request.json();
+  const { driverId, name, driver_number, points, teamId, image, celebrationVideo } = await request.json();
   const supabase = await createServerSupabase();
   
   // Validation 1: Check for duplicate driver number (excluding this driver)
@@ -244,6 +318,39 @@ export async function PUT(request: Request) {
     .single();
     
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  try {
+    await saveCelebrationVideoUrl(supabase, driverId, celebrationVideo);
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || "Failed to save celebration video" }, { status: 500 });
+  }
+
+  // If team assignment changes, keep active season entry aligned.
+  if (teamId !== undefined) {
+    try {
+      const activeSeasonId = await getLatestActiveSeasonId(supabase);
+      if (activeSeasonId) {
+        const { error: seasonEntryError } = await adminSupabase
+          .from("season_driver_entries")
+          .upsert(
+            [
+              {
+                season_id: activeSeasonId,
+                driver_id: driverId,
+                team_id: teamId || null,
+                is_active: true,
+              },
+            ],
+            { onConflict: "season_id,driver_id" }
+          );
+        if (seasonEntryError) {
+          return NextResponse.json({ error: seasonEntryError.message }, { status: 500 });
+        }
+      }
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message || "Failed to sync season driver entry" }, { status: 500 });
+    }
+  }
   
   // Invalidate cache
   apiCache.del('drivers:list');

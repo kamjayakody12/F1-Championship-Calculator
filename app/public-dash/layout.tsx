@@ -29,7 +29,7 @@ export default function AdminLayout({
         </React.Suspense>
 
         {/* the rest of the page */}
-        <SidebarInset className="flex flex-col min-h-screen">
+        <SidebarInset className="public-dash-transparent flex flex-col min-h-screen">
           <SiteHeader />
           <Toaster position="top-center" />
           <KeyboardShortcuts />

@@ -67,6 +67,10 @@ interface DriverStats {
     secondary: string;
     accent: string;
   };
+  allTimeWins: number;
+  allTimePoints: number;
+  allTimePodiums: number;
+  allTimeRaceStarts: number;
 }
 
 
@@ -208,9 +212,11 @@ function DriverStatsContent() {
     try {
       const [
         { data: results },
+        { data: allResults },
         { data: teamsData },
         { data: tracksData },
         { data: selectedTracks },
+        { data: allSelectedTracks },
         { data: rules },
         { data: seasonDriverEntry },
         { data: driverData }
@@ -218,11 +224,13 @@ function DriverStatsContent() {
         (urlSeasonId
           ? supabase.from('results').select('*').eq('driver', driverId).eq('season_id', urlSeasonId)
           : supabase.from('results').select('*').eq('driver', driverId)),
+        supabase.from('results').select('*').eq('driver', driverId),
         supabase.from('teams').select('*'),
         supabase.from('tracks').select('*'),
         (urlSeasonId
           ? supabase.from('selected_tracks').select('*, track(*)').eq('season_id', urlSeasonId)
           : supabase.from('selected_tracks').select('*, track(*)')),
+        supabase.from('selected_tracks').select('*, track(*)'),
         supabase.from('rules').select('polegivespoint, fastestlapgivespoint').eq('id', 1).single(),
         (urlSeasonId
           ? supabase
@@ -253,6 +261,7 @@ function DriverStatsContent() {
       
       // Create selected track map for event type lookup
       const selectedTrackMap = new Map(effectiveSelectedTracks.map((st: Record<string, unknown>) => [st.id as string, st]));
+      const allSelectedTrackMap = new Map(((allSelectedTracks as Record<string, unknown>[]) || []).map((st: Record<string, unknown>) => [st.id as string, st]));
       
       // Team color mapping
       const teamColorMap: { [key: string]: string } = {
@@ -300,6 +309,20 @@ function DriverStatsContent() {
       const driverImage: string = (driverData as any)?.image || (driverData as any)?.carImage || "";
       const driverNumber: number | string | null =
         (driverData as any)?.driver_number ?? (driverData as any)?.number ?? null;
+      const calculateResultPoints = (result: Record<string, unknown>, selectedTrackType: string | undefined) => {
+        if (!result.racefinished) return 0;
+        const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+        const sprintPointsMapping = [8, 7, 6, 5, 4, 3, 2, 1];
+        const eventType = selectedTrackType || 'Race';
+        const pointsMapping = eventType === 'Sprint' ? sprintPointsMapping : racePointsMapping;
+        const maxPositions = eventType === 'Sprint' ? 8 : 10;
+        const pos = (result.finishing_position as number) ?? (result.position as number);
+        const basePoints = pos <= maxPositions ? pointsMapping[(pos || 0) - 1] : 0;
+        const bonusPoints =
+          ((rules as Record<string, unknown>).polegivespoint && result.pole ? 1 : 0) +
+          ((rules as Record<string, unknown>).fastestlapgivespoint && result.fastestlap ? 1 : 0);
+        return basePoints + bonusPoints;
+      };
 
       // Process race results
       const raceResults: RaceResult[] = effectiveResults.map((result: Record<string, unknown>) => {
@@ -310,22 +333,8 @@ function DriverStatsContent() {
         // Calculate points with rules
         const racePointsMapping = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
         const sprintPointsMapping = [8, 7, 6, 5, 4, 3, 2, 1];
-        let points = 0;
-        if (result.racefinished) {
-          const pos = (result.finishing_position as number) ?? (result.position as number);
-          
-          // Determine event type from track
-          const selectedTrack = selectedTrackMap.get(result.track as string);
-          const eventType = selectedTrack?.type || 'Race';
-          
-          // Choose appropriate points mapping
-          const pointsMapping = eventType === 'Sprint' ? sprintPointsMapping : racePointsMapping;
-          const maxPositions = eventType === 'Sprint' ? 8 : 10;
-          
-          const basePoints = pos <= maxPositions ? pointsMapping[(pos || 0) - 1] : 0;
-          const bonusPoints = ((rules as Record<string, unknown>).polegivespoint && result.pole ? 1 : 0) + ((rules as Record<string, unknown>).fastestlapgivespoint && result.fastestlap ? 1 : 0);
-          points = basePoints + bonusPoints;
-        }
+        const selectedTrack = selectedTrackMap.get(result.track as string) as any;
+        const points = calculateResultPoints(result, selectedTrack?.type);
 
         return {
           track: result.track as string,
@@ -357,7 +366,11 @@ function DriverStatsContent() {
          qualifyingTrend: [],
         driverImage,
         driverNumber,
-         teamColors
+         teamColors,
+         allTimeWins: 0,
+         allTimePoints: 0,
+         allTimePodiums: 0,
+         allTimeRaceStarts: 0,
        };
 
       // Process each result
@@ -395,6 +408,17 @@ function DriverStatsContent() {
         } else if (pos >= 4 && pos <= 10) {
           stats.pointsFinishes++;
         }
+      });
+
+      // Calculate all-time career stats across all seasons.
+      const careerResults = (allResults || []) as Record<string, unknown>[];
+      careerResults.forEach((result) => {
+        const pos = Number((result.finishing_position as number) ?? (result.position as number));
+        if (Number.isFinite(pos) && pos === 1) stats.allTimeWins++;
+        if (Number.isFinite(pos) && pos >= 1 && pos <= 3) stats.allTimePodiums++;
+        stats.allTimeRaceStarts++;
+        const selectedTrack = allSelectedTrackMap.get(String(result.track)) as any;
+        stats.allTimePoints += calculateResultPoints(result, selectedTrack?.type);
       });
 
              
@@ -510,13 +534,10 @@ function DriverStatsContent() {
     return `hsl(${h}, ${s}%, ${lightness}%)`;
   };
 
-  const pageGlowPrimary = toAlphaHsl(driverStats?.teamColors?.primary || COLORS.primary, 0.22);
-  const pageGlowSecondary = toAlphaHsl(driverStats?.teamColors?.secondary || COLORS.secondary, 0.12);
-
   const makeTeamTileVars = (baseColor: string) => {
     const baseTop = setHslLightness(baseColor, 30);
     const overlay = toAlphaHsl(baseTop, 0.25);
-    const corner = toAlphaHsl(setHslLightness(baseColor, 36), 0.28);
+    const corner = "rgba(0,0,0,0)";
     const glow = toAlphaHsl(baseColor, 0.95);
     return {
       overlay,
@@ -527,26 +548,10 @@ function DriverStatsContent() {
 
   const vizBase = driverStats?.teamColors?.primary || COLORS.primary;
   const { overlay: vizOverlay, corner: vizCorner, glow: vizGlow } = makeTeamTileVars(vizBase);
+  const tileBorderColor = toAlphaHsl(vizBase, 0.72);
 
   return (
     <div className="relative">
-      {/* Team-color glow behind the whole page (outside padded content to avoid corner gaps) */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -inset-6 -z-10"
-        style={{
-          background: `linear-gradient(to bottom, ${toAlphaHsl(
-            driverStats?.teamColors?.primary || COLORS.primary,
-            0.14
-          )} 0%, rgba(0,0,0,0) 20%),
-                       radial-gradient(ellipse at 0% 0%, ${toAlphaHsl(
-            driverStats?.teamColors?.primary || COLORS.primary,
-            0.2
-          )} 0%, rgba(0,0,0,0) 42%),
-                       radial-gradient(ellipse at 80% 20%, ${pageGlowPrimary} 0%, rgba(0,0,0,0) 60%),
-                       radial-gradient(ellipse at 20% 85%, ${pageGlowSecondary} 0%, rgba(0,0,0,0) 55%)`,
-        }}
-      />
       <div className="p-3 md:p-4 space-y-3 md:space-y-4">
       {/* Header with driver selection */}
       <div className="flex items-center justify-between">
@@ -568,16 +573,17 @@ function DriverStatsContent() {
 
               <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-3 md:gap-4 items-stretch">
                 {/* Left: compact tiles + charts */}
-                <div className="space-y-3 md:space-y-4">
+                <div className="space-y-3 md:space-y-4 lg:h-full lg:flex lg:flex-col lg:justify-end">
                   {/* Top compact stat tiles */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {(() => {
-                      const base = driverStats?.teamColors?.accent || COLORS.wins;
+                      const base = driverStats?.teamColors?.primary || COLORS.primary;
                       const { overlay, corner, glow } = makeTeamTileVars(base);
                       return (
                         <Card
                           className="min-h-[92px] py-0 gap-0 relative overflow-hidden driver-tile-beam-parent"
                           style={{
+                            borderColor: tileBorderColor,
                             backgroundColor: "#070708",
                             backgroundImage: `linear-gradient(to bottom right, ${overlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
                             backgroundSize: "auto, 12px 12px",
@@ -609,12 +615,13 @@ function DriverStatsContent() {
                     })()}
 
                     {(() => {
-                      const base = driverStats?.teamColors?.primary || COLORS.podiums;
+                      const base = driverStats?.teamColors?.primary || COLORS.primary;
                       const { overlay, corner, glow } = makeTeamTileVars(base);
                       return (
                         <Card
                           className="min-h-[92px] py-0 gap-0 relative overflow-hidden driver-tile-beam-parent"
                           style={{
+                            borderColor: tileBorderColor,
                             backgroundColor: "#070708",
                             backgroundImage: `linear-gradient(to bottom right, ${overlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
                             backgroundSize: "auto, 12px 12px",
@@ -646,12 +653,13 @@ function DriverStatsContent() {
                     })()}
 
                     {(() => {
-                      const base = driverStats?.teamColors?.secondary || COLORS.pointsFinishes;
+                      const base = driverStats?.teamColors?.primary || COLORS.primary;
                       const { overlay, corner, glow } = makeTeamTileVars(base);
                       return (
                         <Card
                           className="min-h-[92px] py-0 gap-0 relative overflow-hidden driver-tile-beam-parent"
                           style={{
+                            borderColor: tileBorderColor,
                             backgroundColor: "#070708",
                             backgroundImage: `linear-gradient(to bottom right, ${overlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
                             backgroundSize: "auto, 12px 12px",
@@ -688,6 +696,7 @@ function DriverStatsContent() {
                     <Card
                       className="overflow-hidden driver-tile-beam-parent border-transparent bg-transparent py-0"
                       style={{
+                        borderColor: tileBorderColor,
                         backgroundColor: "#070708",
                         backgroundImage: `linear-gradient(to bottom right, ${vizOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
                         backgroundSize: "auto, 12px 12px",
@@ -776,6 +785,7 @@ function DriverStatsContent() {
                     <Card
                       className="overflow-hidden driver-tile-beam-parent border-transparent bg-transparent py-0"
                       style={{
+                        borderColor: tileBorderColor,
                         backgroundColor: "#070708",
                         backgroundImage: `linear-gradient(to bottom right, ${vizOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
                         backgroundSize: "auto, 12px 12px",
@@ -874,75 +884,113 @@ function DriverStatsContent() {
                     </Card>
                   </div>
                 </div>
-                {/* Right: driver image (free-floating) */}
-                <div className="relative min-h-[220px] md:min-h-[240px] flex items-center justify-center">
-                  <div
-                    aria-hidden
-                    className="absolute inset-0 opacity-90 pointer-events-none"
-                    style={{
-                      background: `radial-gradient(ellipse at 80% 10%, ${
-                        driverStats?.teamColors?.primary || "hsl(210, 100%, 60%)"
-                      }55 0%, rgba(0,0,0,0) 55%), radial-gradient(ellipse at 15% 85%, ${
-                        driverStats?.teamColors?.secondary || "hsl(210, 100%, 60%)"
-                      }33 0%, rgba(0,0,0,0) 60%)`,
-                    }}
-                  />
-                  <div
-                    aria-hidden
-                    className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/25 to-transparent pointer-events-none"
-                  />
+                {/* Right: driver image + all-time mini stats */}
+                <div className="space-y-3 md:space-y-4">
+                  <div className="relative min-h-[220px] md:min-h-[240px] flex items-center justify-center">
+                    <div
+                      aria-hidden
+                      className="absolute inset-0 opacity-90 pointer-events-none"
+                      style={{
+                        background: `radial-gradient(ellipse at 80% 10%, ${
+                          driverStats?.teamColors?.primary || "hsl(210, 100%, 60%)"
+                        }55 0%, rgba(0,0,0,0) 55%), radial-gradient(ellipse at 15% 85%, ${
+                          driverStats?.teamColors?.secondary || "hsl(210, 100%, 60%)"
+                        }33 0%, rgba(0,0,0,0) 60%)`,
+                      }}
+                    />
+                    <div
+                      aria-hidden
+                      className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/25 to-transparent pointer-events-none"
+                    />
 
-                  {driverStats?.driverImage ? (
-                    <>
-                      <div
-                        aria-hidden
-                        className="absolute bottom-0 left-1/2 -translate-x-1/2 z-[2] w-[220px] h-[220px] rounded-full overflow-hidden flex items-center justify-center pointer-events-none select-none"
-                        style={{
-                          border: `2px solid ${driverStats.teamColors?.primary || COLORS.primary}`,
-                          boxShadow: `0 0 0 10px ${toAlphaHsl(
-                            driverStats.teamColors?.primary || COLORS.primary,
-                            0.08
-                          )}`,
-                        }}
-                      >
-                        <img
-                          src={driverStats.driverImage}
-                          alt={`${selectedDriver} image`}
-                          className="w-full h-full object-cover opacity-95"
+                    {driverStats?.driverImage ? (
+                      <>
+                        <div
+                          aria-hidden
+                          className="absolute bottom-0 left-1/2 -translate-x-1/2 z-[2] w-[220px] h-[220px] rounded-full overflow-hidden flex items-center justify-center pointer-events-none select-none"
                           style={{
-                            // Stronger edge fade so it feels "inside the circle" instead of just clipped.
-                            WebkitMaskImage:
-                              "radial-gradient(circle at 50% 55%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 58%, rgba(0,0,0,0) 88%)",
-                            maskImage:
-                              "radial-gradient(circle at 50% 55%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 58%, rgba(0,0,0,0) 88%)",
-                            transform: "scale(1.05)",
-                            transformOrigin: "center",
+                            border: `2px solid ${driverStats.teamColors?.primary || COLORS.primary}`,
+                            boxShadow: `0 0 0 10px ${toAlphaHsl(
+                              driverStats.teamColors?.primary || COLORS.primary,
+                              0.08
+                            )}`,
                           }}
-                        />
-
-                        {driverStats?.driverNumber ? (
-                          <div
-                            aria-hidden
-                            className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
+                        >
+                          <img
+                            src={driverStats.driverImage}
+                            alt={`${selectedDriver} image`}
+                            className="w-full h-full object-cover object-top opacity-95"
                             style={{
-                              fontSize: 120,
-                              fontWeight: 900,
-                              fontStyle: "italic",
-                              color: driverStats.teamColors?.primary || "#ffffff",
-                              opacity: 0.06,
-                              letterSpacing: "-0.06em",
+                              // Stronger edge fade so it feels "inside the circle" instead of just clipped.
+                              WebkitMaskImage:
+                                "radial-gradient(circle at 50% 55%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 58%, rgba(0,0,0,0) 88%)",
+                              maskImage:
+                                "radial-gradient(circle at 50% 55%, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 58%, rgba(0,0,0,0) 88%)",
+                              transform: "scale(1.05)",
+                              transformOrigin: "center",
                             }}
-                          >
-                            {driverStats.driverNumber}
-                          </div>
-                        ) : null}
+                          />
+
+                          {driverStats?.driverNumber ? (
+                            <div
+                              aria-hidden
+                              className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
+                              style={{
+                                fontSize: 120,
+                                fontWeight: 900,
+                                fontStyle: "italic",
+                                color: driverStats.teamColors?.primary || "#ffffff",
+                                opacity: 0.06,
+                                letterSpacing: "-0.06em",
+                              }}
+                            >
+                              {driverStats.driverNumber}
+                            </div>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                        No driver image
                       </div>
-                    </>
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                      No driver image
-                    </div>
-                  )}
+                    )}
+                  </div>
+                  <Card
+                    className="overflow-hidden driver-tile-beam-parent border-transparent bg-transparent py-0"
+                    style={{
+                      borderColor: tileBorderColor,
+                      backgroundColor: "#070708",
+                      backgroundImage: `linear-gradient(to bottom right, ${vizOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
+                      backgroundSize: "auto, 12px 12px",
+                      backgroundPosition: "center, 0 0",
+                      ["--driver-tile-glow" as any]: vizGlow,
+                      ["--driver-tile-glow-blur" as any]: "30px",
+                    }}
+                  >
+                    <CardHeader className="pb-1 pt-5">
+                      <CardTitle className="text-sm">All-Time Career</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-1 pb-3">
+                      <div className="grid grid-cols-2 gap-2 text-sm max-w-[280px] mx-auto">
+                        <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                          <div className="text-muted-foreground text-xs">Wins</div>
+                          <div className="font-bold">{driverStats?.allTimeWins || 0}</div>
+                        </div>
+                        <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                          <div className="text-muted-foreground text-xs">Points</div>
+                          <div className="font-bold">{driverStats?.allTimePoints || 0}</div>
+                        </div>
+                        <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                          <div className="text-muted-foreground text-xs">Podiums</div>
+                          <div className="font-bold">{driverStats?.allTimePodiums || 0}</div>
+                        </div>
+                        <div className="rounded-md border border-white/10 bg-black/25 p-2">
+                          <div className="text-muted-foreground text-xs">Race Starts</div>
+                          <div className="font-bold">{driverStats?.allTimeRaceStarts || 0}</div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               </div>
 
@@ -953,6 +1001,7 @@ function DriverStatsContent() {
       <Card
         className="overflow-hidden driver-tile-beam-parent border-transparent bg-transparent py-0"
         style={{
+          borderColor: tileBorderColor,
           backgroundColor: "#070708",
           backgroundImage: `linear-gradient(to bottom right, ${vizOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
           backgroundSize: "auto, 12px 12px",
@@ -1026,6 +1075,7 @@ function DriverStatsContent() {
       <Card
         className="overflow-hidden driver-tile-beam-parent border-transparent bg-transparent py-0"
         style={{
+          borderColor: tileBorderColor,
           backgroundColor: "#070708",
           backgroundImage: `linear-gradient(to bottom right, ${vizOverlay} 0%, rgba(0,0,0,0) 55%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
           backgroundSize: "auto, 12px 12px",

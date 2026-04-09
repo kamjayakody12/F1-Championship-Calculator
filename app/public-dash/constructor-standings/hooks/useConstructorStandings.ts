@@ -25,109 +25,62 @@ export const useConstructorStandings = (seasonId?: string) => {
 
   const fetchData = async () => {
     try {
-      let drivers: any[] = [];
-      let teamsData: any[] = [];
-      let results: any[] = [];
-      let schedules: any[] = [];
-      let selectedTracks: any[] = [];
-      let tracksData: any[] = [];
-      let rules: any = null;
+      let [
+        { data: driversData },
+        { data: teamsDataData },
+        { data: resultsData },
+        { data: schedulesData },
+        { data: tracksDataData },
+        { data: selectedTracksData },
+        { data: seasonEntries },
+        { data: seasonDrivers },
+        { data: rulesData },
+      ] = await Promise.all([
+        supabase.from('drivers').select('*'),
+        supabase.from('teams').select('*'),
+        (seasonId
+          ? supabase.from('results').select('*').eq('season_id', seasonId)
+          : supabase.from('results').select('*')),
+        (seasonId
+          ? supabase.from('schedules').select('*').eq('season_id', seasonId)
+          : supabase.from('schedules').select('*')),
+        supabase.from('tracks').select('*'),
+        (seasonId
+          ? supabase.from('selected_tracks').select('*, track(*)').eq('season_id', seasonId)
+          : supabase.from('selected_tracks').select('*, track(*)')),
+        (seasonId
+          ? supabase
+              .from("season_driver_entries")
+              .select("driver_id, team_id")
+              .eq("season_id", seasonId)
+          : Promise.resolve({ data: [] as any[] })),
+        (seasonId
+          ? supabase
+              .from("season_drivers")
+              .select("driver_id, team_id")
+              .eq("season_id", seasonId)
+          : Promise.resolve({ data: [] as any[] })),
+        supabase.from('rules').select('polegivespoint, fastestlapgivespoint').eq('id', 1).single(),
+      ]);
 
-      if (seasonId) {
-        const [
-          { data: seasonTeams },
-          { data: seasonDrivers },
-          { data: seasonSelectedTracks },
-          { data: seasonSchedules },
-          { data: seasonResults },
-          { data: liveResults },
-          { data: tracks },
-          { data: rulesData },
-        ] = await Promise.all([
-          supabase.from('season_teams').select('*').eq('season_id', seasonId),
-          supabase.from('season_drivers').select('*').eq('season_id', seasonId),
-          supabase.from('season_selected_tracks').select('*').eq('season_id', seasonId),
-          supabase.from('season_schedules').select('selected_track_id, date').eq('season_id', seasonId),
-          supabase.from('season_results').select('*').eq('season_id', seasonId),
-          supabase.from('results').select('*').eq('season_id', seasonId),
-          supabase.from('tracks').select('*'),
-          supabase.from('rules').select('polegivespoint, fastestlapgivespoint').eq('id', 1).single(),
-        ]);
+      const seasonTeamByDriverId = new Map<string, string | null>();
+      ((seasonDrivers as any[]) || []).forEach((d: any) => {
+        seasonTeamByDriverId.set(String(d.driver_id), d.team_id || null);
+      });
+      ((seasonEntries as any[]) || []).forEach((e: any) => {
+        seasonTeamByDriverId.set(String(e.driver_id), e.team_id || null);
+      });
 
-        tracksData = tracks || [];
-        rules = rulesData;
-
-        const trackRowById = new Map((tracksData || []).map((t: any) => [t.id, t]));
-
-        drivers = (seasonDrivers || []).map((d: any) => ({
-          id: d.driver_id,
-          name: d.name,
-          team: d.team_id || '',
-          points: d.points ?? 0,
-        }));
-
-        teamsData = (seasonTeams || []).map((t: any) => ({
-          id: t.team_id,
-          name: t.name,
-          points: t.points ?? 0,
-          logo: t.logo || '',
-        }));
-
-        selectedTracks = (seasonSelectedTracks || []).map((st: any) => {
-          const physicalTrack = trackRowById.get(st.track_id);
-          return {
-            id: st.selected_track_id,
-            type: st.type,
-            track: physicalTrack ? { id: physicalTrack.id, name: physicalTrack.name, img: physicalTrack.img } : null,
-          };
-        });
-
-        schedules = (seasonSchedules || []).map((s: any) => ({
-          track: s.selected_track_id,
-          date: s.date || '',
-        }));
-
-        // Prefer season_results; if none exist yet, fall back to the live season-scoped results.
-        const useSeasonResults = (seasonResults || []).length > 0;
-        results = useSeasonResults
-          ? (seasonResults || []).map((r: any) => ({
-              track: r.selected_track_id,
-              driver: r.driver_id,
-              team_id: r.team_id,
-              finishing_position: r.finishing_position,
-              position: r.finishing_position,
-              pole: r.pole,
-              fastestlap: r.fastestlap,
-              racefinished: r.racefinished,
-            }))
-          : liveResults || [];
-      } else {
-        let [
-          { data: driversData },
-          { data: teamsDataData },
-          { data: resultsData },
-          { data: schedulesData },
-          { data: tracksDataData },
-          { data: selectedTracksData },
-          { data: rulesData },
-        ] = await Promise.all([
-          supabase.from('drivers').select('*'),
-          supabase.from('teams').select('*'),
-          supabase.from('results').select('*'),
-          supabase.from('schedules').select('*'),
-          supabase.from('tracks').select('*'),
-          supabase.from('selected_tracks').select('*, track(*)'),
-          supabase.from('rules').select('polegivespoint, fastestlapgivespoint').eq('id', 1).single(),
-        ]);
-
-        drivers = driversData || [];
-        teamsData = teamsDataData || [];
-        results = resultsData || [];
-        schedules = schedulesData || [];
-        tracksData = tracksDataData || [];
-        selectedTracks = selectedTracksData || [];
-        rules = rulesData;
-      }
+      const drivers = (driversData || []).map((d: any) => ({
+        ...d,
+        team: seasonId ? (seasonTeamByDriverId.get(String(d.id)) ?? d.team ?? null) : d.team,
+      }));
+      const teamsData = teamsDataData || [];
+      const results = resultsData || [];
+      const schedules = schedulesData || [];
+      const tracksData = tracksDataData || [];
+      const selectedTracks = selectedTracksData || [];
+      const rules = rulesData;
 
       if (!tracksData || !rules || !selectedTracks) {
         throw new Error('Failed to fetch data');
@@ -140,7 +93,14 @@ export const useConstructorStandings = (seasonId?: string) => {
       const driverMap = new Map(drivers.map((driver: any) => [driver.id, driver]));
       const teamsWithDrivers = teamsData.filter((team: any) =>
         drivers.some((driver) => driver.team === team.id) ||
-        results.some((result: any) => (((result as any).team_id || driverMap.get(result.driver)?.team || '') === team.id))
+        results.some((result: any) => {
+          const resolvedTeamId =
+            (seasonId ? seasonTeamByDriverId.get(String(result.driver)) : null) ||
+            (result as any).team_id ||
+            driverMap.get(result.driver)?.team ||
+            "";
+          return resolvedTeamId === team.id;
+        })
       );
       const teamMap = new Map(teamsWithDrivers.map((team) => [team.id, team]));
       const normalizedSchedules = (schedules || []).length
@@ -154,7 +114,11 @@ export const useConstructorStandings = (seasonId?: string) => {
       // Process race results
       const raceResults: RaceResult[] = results.map((result) => {
         const driver = driverMap.get(result.driver);
-        const resolvedTeamId = (result as any).team_id || driver?.team || '';
+        const resolvedTeamId =
+          (seasonId ? seasonTeamByDriverId.get(String(result.driver)) : null) ||
+          (result as any).team_id ||
+          driver?.team ||
+          '';
         const team = teamMap.get(resolvedTeamId);
         const selectedTrack = selectedTrackMap.get(result.track);
         const physicalTrackId =

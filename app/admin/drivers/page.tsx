@@ -280,9 +280,6 @@ export default function AdminDriversPage() {
                   onChange={(e) => setDriverImageFile(e.target.files?.[0] || null)}
                 />
               </div>
-
-              {/* Removed URL input: browse-only upload */}
-
               <DialogFooter>
                 <Button type="submit">Add Driver</Button>
               </DialogFooter>
@@ -435,7 +432,7 @@ function EditDriverContent({
         name: (name as string).trim(),
         driver_number: driverNumber ? parseInt(driverNumber as string) : null,
         points: points ? parseInt(points.toString()) : 0,
-        image: imageUrl 
+        image: imageUrl,
       }),
     });
     

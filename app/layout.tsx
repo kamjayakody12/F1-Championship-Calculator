@@ -17,7 +17,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="bg-background text-foreground min-h-screen">
+      <body className="text-foreground min-h-screen bg-black">
         <ThemeProvider>
           <Toaster position="top-center" />
           {children}

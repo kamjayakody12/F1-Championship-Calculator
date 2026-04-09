@@ -173,7 +173,7 @@ export default async function DriverTilesPage({
 
     const containerStyles = embedded
       ? {
-          background: undefined,
+          backgroundColor: undefined,
           backgroundImage: `${gradient}, radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
           backgroundSize: "auto, 12px 12px",
           backgroundPosition: "center, 0 0",
@@ -183,7 +183,7 @@ export default async function DriverTilesPage({
           ["--driver-tile-glow-blur" as any]: teamName === "RB" ? "44px" : "30px",
         }
       : {
-          background: `#070708`,
+          backgroundColor: "transparent",
           backgroundImage: `${gradient}, radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`,
           backgroundSize: "auto, 12px 12px",
           backgroundPosition: "center, 0 0",
@@ -298,7 +298,7 @@ export default async function DriverTilesPage({
       <div
         className="relative overflow-hidden rounded-2xl shadow w-full flex items-center justify-center"
         style={{
-          background: `#070708`,
+          backgroundColor: "transparent",
           backgroundImage: gradient,
           minHeight: 340,
           border: `1px dashed ${addAlphaToHsl(base, 0.45)}`,
@@ -329,7 +329,7 @@ export default async function DriverTilesPage({
       <div
         className={`relative overflow-hidden ${embedded ? "" : "rounded-2xl shadow"} w-full flex flex-col items-center justify-start gap-3 driver-team-logo-beam-parent pt-6 pb-28`}
         style={{
-          background: `#070708`,
+          backgroundColor: "transparent",
           backgroundImage: embedded
             ? `radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)`
             : undefined,
@@ -392,7 +392,7 @@ export default async function DriverTilesPage({
           return (
             <div
               key={`${t.teamName}-${t.drivers?.[0]?.id || "team"}`}
-              className="team-row-beam-parent relative overflow-hidden rounded-2xl shadow border border-border bg-[#070708]"
+              className="team-row-beam-parent relative overflow-hidden rounded-2xl shadow border border-border bg-transparent"
               style={{ minHeight: 340 }}
             >
               <div className="grid grid-cols-1 md:grid-cols-[0.85fr_1.3fr_0.85fr] items-stretch">
