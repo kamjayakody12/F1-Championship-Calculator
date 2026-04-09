@@ -1,11 +1,11 @@
 "use client"
 
 import * as React from "react"
+import Image from "next/image"
 import {
   AudioWaveform,
   BookOpen,
   Bot,
-  CarFront,
   CarIcon,
   ChartBar,
   ClapperboardIcon,
@@ -95,7 +95,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               className="data-[slot=sidebar-menu-button]:!p-1.5"
             >
               <a href="#">
-                <CarFront className="!size-5" />
+                <Image src="/logo.png" alt="F1 Championship" width={28} height={28} className="!size-7 rounded" />
                 <span className="text-base font-semibold">F1 Championship Dashboard</span>
               </a>
             </SidebarMenuButton>
